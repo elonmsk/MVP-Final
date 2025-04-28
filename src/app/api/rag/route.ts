@@ -3,30 +3,59 @@ import OpenAI from 'openai';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 
+console.log("Chargement de /api/rag/route.ts...");
+
 // --- Configuration ---
+console.log("Lecture des variables d'environnement...");
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_EMBEDDING_MODEL = "text-embedding-3-small";
 const OPENAI_LLM_MODEL = "gpt-4o-mini"; // Modèle GPT-4o mini
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
+console.log(`SUPABASE_URL: ${SUPABASE_URL ? 'Trouvé' : 'NON TROUVÉ'}`);
+console.log(`SUPABASE_KEY: ${SUPABASE_KEY ? 'Trouvé' : 'NON TROUVÉ'}`);
+console.log(`OPENAI_API_KEY: ${OPENAI_API_KEY ? 'Trouvé' : 'NON TROUVÉ'}`);
 
 // --- Validation de la configuration ---
+console.log("Validation des variables d'environnement...");
 if (!SUPABASE_URL || !SUPABASE_KEY) {
+  console.error("ERREUR: SUPABASE_URL ou SUPABASE_KEY manquante!");
   throw new Error("SUPABASE_URL et SUPABASE_KEY doivent être définis dans les variables d'environnement");
 }
 if (!OPENAI_API_KEY) {
+  console.error("ERREUR: OPENAI_API_KEY manquante!");
   throw new Error("OPENAI_API_KEY doit être défini dans les variables d'environnement");
 }
+console.log("Validation des variables d'environnement OK.");
 
 // --- Initialisation des clients ---
-const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-  },
-});
+let supabase: SupabaseClient;
+let openai: OpenAI;
 
-const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+try {
+  console.log("Initialisation du client Supabase...");
+  supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+  console.log("Client Supabase initialisé.");
+} catch (error) {
+  console.error("ERREUR lors de l'initialisation du client Supabase:", error);
+  throw new Error(`Erreur initialisation Supabase: ${error instanceof Error ? error.message : String(error)}`);
+}
+
+try {
+  console.log("Initialisation du client OpenAI...");
+  openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+  console.log("Client OpenAI initialisé.");
+} catch (error) {
+  console.error("ERREUR lors de l'initialisation du client OpenAI:", error);
+  throw new Error(`Erreur initialisation OpenAI: ${error instanceof Error ? error.message : String(error)}`);
+}
+
+console.log("Initialisation des clients terminée.");
 
 // --- Types et Schémas ---
 const QueryRequestSchema = z.object({
