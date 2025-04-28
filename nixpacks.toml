@@ -1,0 +1,9 @@
+# nixpacks.toml
+
+[phases.install]
+# Force l'utilisation de npm install au lieu de npm ci
+cmds = ["npm install"]
+
+[start]
+# Assure que la commande de démarrage par défaut est bien utilisée
+cmd = "npm run start" 
