@@ -398,94 +398,103 @@ export default function WelcomePage() {
     }
   }
 
-  const handleSuggestionClick = (suggestionId: string) => {
-    // Ajouter la suggestion à l'historique
-    let newHistoryItems: HistoryItem[] = []
-    let newMessage: Message | null = null
+  const handleSuggestionClick = async (suggestionId: string) => {
+    // Trouver la suggestion cliquée pour obtenir son label
+    const suggestion = healthSuggestions.find(s => s.id === suggestionId);
+    if (!suggestion) return;
 
-    if (suggestionId === "carte-perdue") {
-      // Ajouter la suggestion à l'historique
-      const suggestionHistoryItem: HistoryItem = {
-        id: `hist-${Date.now()}`,
-        type: "question",
-        content: "💳 J'ai perdu ma carte vitale",
-        timestamp: new Date(),
-      }
+    const userQuestion = suggestion.label;
 
-      // Ajouter les étapes à l'historique
-      const step1HistoryItem: HistoryItem = {
-        id: `hist-${Date.now() + 1}`,
-        type: "answer",
-        content: "✅ Déclarer la perte sur ameli.fr",
-        timestamp: new Date(),
-      }
-
-      const step2HistoryItem: HistoryItem = {
-        id: `hist-${Date.now() + 2}`,
-        type: "answer",
-        content: "✅ Commander la nouvelle carte vitale",
-        timestamp: new Date(),
-      }
-
-      newHistoryItems = [suggestionHistoryItem, step1HistoryItem, step2HistoryItem]
-
-      // Créer le message de réponse détaillé
-      newMessage = {
-        id: `msg-${Date.now()}`,
-        sender: "user",
-        content: "💳 J'ai perdu ma carte vitale",
-        timestamp: new Date(),
-      }
-
-      // Réponse de l'assistant avec les étapes détaillées
-      const responseMessage: Message = {
-        id: `msg-${Date.now() + 1}`,
-        sender: "assistant",
-        content: `💳 J'ai perdu ma carte Vitale : que faire ?
-
-Voici les étapes pour déclarer la perte et demander une nouvelle carte.
-
-✅ 1. Déclarez la perte
-  1. Allez sur le site ameli.fr et connectez-vous.
-  2. Cliquez sur « Mes démarches »
-  3. Sélectionnez « Déclarer la perte ou le vol de ma carte Vitale »
-  4. Choisissez la personne concernée
-  5. Confirmez que vous rendrez la carte si vous la retrouvez
-  6. Validez
-
-📝 2. Commandez une nouvelle carte
-  • Après la déclaration, cliquez sur « Continuer » pour demander votre nouvelle carte
-
-⏱️ 3. Attention au délai
-▲ Vous devez faire la commande dans les 4 jours après la déclaration.
-   Sinon, vous devrez attendre 1 jour avant de recommencer.
-
-📋 4. Si vous retrouvez la carte
-  • Retournez l'ancienne carte à votre caisse d'assurance maladie.
-
-📱 Vous pouvez aussi utiliser l'application ameli
-  • Connectez-vous avec empreinte ou mot de passe
-  • Faites les mêmes démarches facilement depuis votre téléphone`,
-        timestamp: new Date(),
-        showButtons: true,
-        buttons: [
-          { id: "faire-demarche", label: "Faire la démarche", icon: "🔗" },
-          { id: "sources", label: "Sources", icon: "📚" },
-        ],
-      }
-
-      setMessages([...messages, newMessage, responseMessage])
-    } else if (suggestionId === "obtenir-carte") {
-      // Gérer la suggestion "Obtenir une carte vitale"
-      // Code similaire pour cette suggestion
-    } else if (suggestionId === "renouveler-carte") {
-      // Gérer la suggestion "Renouveler ma carte vitale"
-      // Code similaire pour cette suggestion
+    // Ajoute le message utilisateur à l'UI immédiatement
+    const userMessage: Message = {
+      id: `msg-user-${Date.now()}`,
+      sender: "user",
+      content: userQuestion,
+      timestamp: new Date(),
     }
+    setMessages(prevMessages => [...prevMessages, userMessage]);
 
-    // Mettre à jour l'historique
-    if (newHistoryItems.length > 0) {
-      setHistory([...history, ...newHistoryItems])
+    // Ajoute la question à l'historique
+    const suggestionHistoryItem: HistoryItem = {
+      id: `hist-sugg-${Date.now()}`,
+      type: "question",
+      content: `${suggestion.icon ? suggestion.icon + " " : ""}${userQuestion}`,
+      timestamp: new Date(),
+    }
+    setHistory(prevHistory => [...prevHistory, suggestionHistoryItem]);
+
+    setIsLoading(true);
+
+    // --- Préparation du contexte de qualification (identique à handleQuestionSubmit) ---
+    let qualificationContext = "";
+    const category = categories.find(c => c.id === selectedCategory);
+    if (category) {
+      qualificationContext += `Catégorie choisie: ${category.title}\n`;
+    }
+    if (Object.keys(userAnswers).length > 0) {
+      qualificationContext += "Réponses aux questions de qualification:\n";
+      if (selectedCategory === 'sante') { // Adapter si plusieurs jeux de questions
+          Object.entries(userAnswers).forEach(([questionId, answerId]) => {
+          const questionData = healthQuestions.find(q => q.id === questionId);
+          const answerData = questionData?.buttons.find(b => b.id === answerId);
+          if (questionData && answerData) {
+            qualificationContext += `- ${questionData.question}: ${answerData.label}\n`;
+          }
+        });
+      }
+    }
+    qualificationContext = qualificationContext.trim();
+    // -----------------------------------------------
+
+    try {
+      // Appel à l'API RAG avec le texte de la suggestion
+      const response = await fetch('/api/rag', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          question: userQuestion, // Utilise le label de la suggestion comme question
+          qualificationContext: qualificationContext || undefined 
+        }), 
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Erreur API: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+
+      // Ajoute le message de l'assistant à l'UI
+      const assistantMessage: Message = {
+        id: `msg-assistant-${Date.now()}`,
+        sender: "assistant",
+        content: data.answer,
+        timestamp: new Date(),
+      }
+      setMessages(prevMessages => [...prevMessages, assistantMessage]);
+
+      // Ajoute la réponse à l'historique
+      const assistantHistoryItem: HistoryItem = {
+        id: `hist-ans-${Date.now()}`,
+        type: "answer",
+        content: data.answer,
+        timestamp: new Date(),
+      }
+      setHistory(prevHistory => [...prevHistory, assistantHistoryItem]);
+
+    } catch (error) {
+      console.error("Erreur lors de l'appel RAG depuis la suggestion:", error);
+      const errorMessage: Message = {
+        id: `msg-error-${Date.now()}`,
+        sender: "assistant",
+        content: `Désolé, une erreur est survenue lors du traitement de votre demande. ${error instanceof Error ? error.message : ''}`,
+        timestamp: new Date(),
+      }
+      setMessages(prevMessages => [...prevMessages, errorMessage]);
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -513,7 +522,7 @@ Voici les étapes pour déclarer la perte et demander une nouvelle carte.
   if (currentStep !== "dashboard") {
     return (
       <div className="min-h-screen bg-[#faf9f6] flex items-center justify-center p-4">
-        <div className="max-w-7xl w-full mx-auto flex flex-col lg:flex-row gap-12 lg:gap-24 py-12">
+        <div className="max-w-7xl w-full mx-auto flex flex-col lg:flex-row lg:items-baseline gap-12 lg:gap-24 py-12">
           {/* Left Section - Always the same */}
           <div className="flex-1 space-y-8">
             <div className="flex flex-col items-center lg:items-start">
