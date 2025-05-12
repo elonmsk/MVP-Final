@@ -3,7 +3,7 @@
 import type React from "react"
 
 import Image from "next/image"
-import { Sparkles, Check, Send, Lock, RefreshCw, CheckCircle } from "lucide-react"
+import { Sparkles, Check, Send, Lock, RefreshCw, CheckCircle, Menu } from "lucide-react"
 import { useState, useRef, useEffect } from "react"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -91,6 +91,7 @@ export default function WelcomePage() {
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const chatContainerRef = useRef<HTMLElement>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Questions pour la catégorie Santé
   const healthQuestions: Question[] = [
@@ -521,10 +522,10 @@ export default function WelcomePage() {
   // Affichage des écrans d'onboarding
   if (currentStep !== "dashboard") {
     return (
-      <div className="min-h-screen bg-[#faf9f6] flex items-center justify-center p-4">
-        <div className="max-w-7xl w-full mx-auto flex flex-col lg:flex-row lg:items-baseline gap-12 lg:gap-24 py-12">
+      <div className="min-h-screen bg-[#faf9f6] flex items-center justify-center p-2 sm:p-4">
+        <div className="w-full max-w-7xl mx-auto flex flex-col lg:flex-row lg:items-baseline gap-8 sm:gap-12 lg:gap-24 py-6 sm:py-12">
           {/* Left Section - Always the same */}
-          <div className="flex-1 space-y-8">
+          <div className="flex-1 space-y-6 sm:space-y-8">
             <div className="flex flex-col items-center lg:items-start">
               <div className="mb-4">
                 <Image
@@ -535,71 +536,71 @@ export default function WelcomePage() {
                   className="rounded-full"
                 />
               </div>
-              <h1 className="text-4xl font-bold text-[#000000] mb-2 text-center lg:text-left">
+              <h1 className="text-2xl sm:text-4xl font-bold text-[#000000] mb-2 text-center lg:text-left">
                 Bienvenue sur l&apos;assistant
               </h1>
-              <p className="text-[#73726d] text-lg text-center lg:text-left">
+              <p className="text-[#73726d] text-base sm:text-lg text-center lg:text-left">
                 Je suis un outil pensé pour vous aider à trouver les bonnes infos
               </p>
             </div>
 
-            <div className="space-y-6">
-              <h2 className="text-2xl font-semibold text-[#000000]">Comment ça marche ?</h2>
-              <ol className="space-y-4">
-                <li className="flex gap-3">
+            <div className="space-y-4 sm:space-y-6">
+              <h2 className="text-xl sm:text-2xl font-semibold text-[#000000]">Comment ça marche ?</h2>
+              <ol className="space-y-2 sm:space-y-4">
+                <li className="flex gap-2 sm:gap-3">
                   <span className="font-bold text-[#000000] min-w-[20px]">1</span>
-                  <span className="text-[#414143]">Vous choisissez votre rôle</span>
+                  <span className="text-[#414143] text-sm sm:text-base">Vous choisissez votre rôle</span>
                 </li>
-                <li className="flex gap-3">
+                <li className="flex gap-2 sm:gap-3">
                   <span className="font-bold text-[#000000] min-w-[20px]">2</span>
-                  <span className="text-[#414143]">On vous pose quelques questions simples</span>
+                  <span className="text-[#414143] text-sm sm:text-base">On vous pose quelques questions simples</span>
                 </li>
-                <li className="flex gap-3">
+                <li className="flex gap-2 sm:gap-3">
                   <span className="font-bold text-[#000000] min-w-[20px]">3</span>
-                  <span className="text-[#414143]">
+                  <span className="text-[#414143] text-sm sm:text-base">
                     L&apos;assistant vous propose des infos fiables et personnalisées
                   </span>
                 </li>
               </ol>
             </div>
 
-            <div className="flex items-center gap-2 text-[#414143]">
+            <div className="flex items-center gap-2 text-[#414143] text-sm sm:text-base">
               <Sparkles className="h-5 w-5 text-yellow-400" />
               <span>C&apos;est rapide, gratuit et sans inscription</span>
             </div>
           </div>
 
           {/* Right Section - Changes based on current step */}
-          <div className="flex-1 space-y-6">
+          <div className="flex-1 space-y-4 sm:space-y-6">
             {currentStep === "initial" && (
               // Initial screen with role selection
               <>
                 <div className="text-center lg:text-left">
-                  <h2 className="text-2xl font-semibold text-[#000000] mb-4">Et vous, qui êtes-vous ?</h2>
-                  <p className="text-[#73726d] mb-2">Vous êtes ici pour aider ou pour être accompagné ?</p>
-                  <p className="text-[#73726d]">Choisissez votre parcours</p>
+                  <h2 className="text-xl sm:text-2xl font-semibold text-[#000000] mb-2 sm:mb-4">Et vous, qui êtes-vous ?</h2>
+                  <p className="text-[#73726d] mb-1 sm:mb-2 text-sm sm:text-base">Vous êtes ici pour aider ou pour être accompagné ?</p>
+                  <p className="text-[#73726d] text-sm sm:text-base">Choisissez votre parcours</p>
                 </div>
 
-                <div className="space-y-4 max-w-md mx-auto lg:mx-0">
+                <div className="space-y-3 sm:space-y-4 max-w-md mx-auto lg:mx-0">
                   <button
-                    className="w-full bg-[#000000] text-white rounded-lg p-4 flex items-center justify-center gap-2 hover:bg-opacity-90 transition-all"
+                    className="w-full bg-[#000000] text-white rounded-lg p-3 sm:p-4 flex items-center justify-center gap-2 hover:bg-opacity-90 transition-all text-base sm:text-lg"
                     onClick={() => setCurrentStep("intro")}
                   >
                     <span className="text-yellow-400">👤</span>
                     <div className="text-left">
                       <div className="font-medium">Accompagnant.e</div>
-                      <div className="text-sm text-gray-300">(Travailleur social, bénévole)</div>
+                      <div className="text-xs sm:text-sm text-gray-300">(Travailleur social, bénévole)</div>
                     </div>
                   </button>
 
                   <button
-                    className="w-full bg-[#000000] text-white rounded-lg p-4 flex items-center justify-center gap-2 hover:bg-opacity-90 transition-all"
+                    className="w-full bg-[#000000] text-white rounded-lg p-3 sm:p-4 flex items-center justify-center gap-2 hover:bg-opacity-90 transition-all text-base sm:text-lg"
                     onClick={() => setCurrentStep("intro")}
                   >
                     <span className="text-yellow-400">👤</span>
                     <div className="text-left">
                       <div className="font-medium">Accompagné.e</div>
-                      <div className="text-sm text-gray-300">(Je cherche un logement)</div>
+                      <div className="text-xs sm:text-sm text-gray-300">(Je cherche un logement)</div>
                     </div>
                   </button>
 
@@ -715,13 +716,45 @@ export default function WelcomePage() {
 
   // Affichage du tableau de bord principal (après l'onboarding)
   return (
-    <div className="h-screen bg-gray-50 flex text-gray-800">
-      {/* Sidebar */}
-      <div className="w-80 border-r border-gray-200 flex flex-col bg-white">
+    <div className="h-screen bg-gray-50 flex text-gray-800 relative">
+      {/* Bouton d'ouverture sidebar mobile */}
+      <button
+        className="md:hidden absolute top-3 left-3 z-50 bg-white border border-gray-200 rounded-full p-2 shadow"
+        onClick={() => setSidebarOpen(true)}
+        aria-label="Ouvrir le menu"
+      >
+        <Menu className="h-6 w-6" />
+      </button>
+      {/* Sidebar responsive */}
+      {/* Overlay mobile */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-40 bg-black/30 md:hidden" onClick={() => setSidebarOpen(false)}></div>
+      )}
+      <div
+        className={`
+          bg-white border-r border-gray-200 flex flex-col
+          w-80 md:static md:translate-x-0 md:w-80
+          fixed top-0 left-0 h-full z-50 transition-transform duration-200
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+          md:relative md:flex md:translate-x-0
+        `}
+        style={{ maxWidth: 320 }}
+        tabIndex={-1}
+        aria-label="Sidebar"
+      >
+        {/* Bouton de fermeture mobile */}
+        <div className="md:hidden flex justify-end p-2">
+          <button
+            className="bg-gray-100 rounded-full p-2"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Fermer le menu"
+          >
+            <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
         <div className="p-6 flex-1 overflow-y-auto">
           <h2 className="text-xl font-semibold text-gray-900 mb-1">Vos Questions</h2>
           <p className="text-sm text-gray-500 mb-6">Résumé et liens utiles</p>
-
           <div className="border border-gray-200 rounded-lg p-3 min-h-[160px]">
             {history.length > 0 ? (
               <ul className="w-full space-y-1.5">
@@ -739,7 +772,6 @@ export default function WelcomePage() {
             )}
           </div>
         </div>
-
         {history.some((item) => item.category === "sante") && (
           <div className="p-4 border-t border-gray-200 flex justify-center gap-2">
             <button
@@ -750,13 +782,11 @@ export default function WelcomePage() {
             </button>
           </div>
         )}
-
         <div className="p-4 border-t border-gray-200 flex items-center text-xs text-gray-500">
           <Lock className="h-4 w-4 mr-2 text-gray-400" />
           <span>Vos informations ne sont pas sauvegardées</span>
         </div>
       </div>
-
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header dynamique */}
@@ -894,20 +924,20 @@ export default function WelcomePage() {
         </main>
 
         {/* Question Input */}
-        <div className="border-t border-gray-200 p-4 bg-white">
-          <form onSubmit={handleQuestionSubmit} className="max-w-3xl mx-auto flex items-center gap-3">
-            <div className="flex-1 relative">
+        <div className="border-t border-gray-200 p-2 sm:p-4 bg-white">
+          <form onSubmit={handleQuestionSubmit} className="max-w-3xl mx-auto flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
+            <div className="flex-1 w-full relative">
               <input
                 type="text"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 placeholder="Posez votre question ici..."
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent bg-gray-100"
+                className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent bg-gray-100 text-sm sm:text-base"
               />
             </div>
             <button
               type="submit"
-              className="bg-blue-600 text-white rounded-lg p-2.5 hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full sm:w-auto bg-blue-600 text-white rounded-lg p-2 sm:p-2.5 hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex justify-center"
               disabled={!question.trim() || isLoading}
             >
               {isLoading ? (
