@@ -3,7 +3,7 @@
 import type React from "react"
 
 import Image from "next/image"
-import { Sparkles, Check, Send, Lock, RefreshCw, CheckCircle, Menu, FolderKanban, ClipboardCheck, HelpCircle, MessageSquareText } from "lucide-react"
+import { Sparkles, Check, Send, Lock, RefreshCw, Menu, FolderKanban, ClipboardCheck, HelpCircle, MessageSquareText } from "lucide-react"
 import { useState, useRef, useEffect } from "react"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -542,7 +542,7 @@ export default function WelcomePage() {
   }, [messages])
 
   // --- Dashboard principal --- 
-  const selectedCategoryData = categories.find(c => c.id === selectedCategory);
+  // const selectedCategoryData = categories.find(c => c.id === selectedCategory); // Supprimé car non utilisé
 
   // Affichage des écrans d'onboarding
   if (currentStep !== "dashboard") {
@@ -850,7 +850,7 @@ export default function WelcomePage() {
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-gray-400 py-4">
                 <RefreshCw className="h-6 w-6 mb-1" />
-                <span>L'historique est vide</span>
+                <span>L&apos;historique est vide</span>
               </div>
             )}
           </div>
