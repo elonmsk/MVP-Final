@@ -3,12 +3,13 @@
 import type React from "react"
 
 import Image from "next/image"
-import { Sparkles, Check, Send, Lock, RefreshCw, CheckCircle, Menu } from "lucide-react"
+import { Sparkles, Check, Send, Lock, RefreshCw, CheckCircle, Menu, FolderKanban, ClipboardCheck, HelpCircle, MessageSquareText } from "lucide-react"
 import { useState, useRef, useEffect } from "react"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
 type Step = "initial" | "intro" | "documents" | "birthdate" | "dashboard"
+type UserRole = "accompagnant" | "accompagne" | null // Ajout du type pour le rôle utilisateur
 
 interface Document {
   id: string
@@ -17,7 +18,7 @@ interface Document {
 
 interface Category {
   id: string
-  icon: string
+  icon: string | { src: string; alt: string }
   title: string
   description: string
 }
@@ -71,7 +72,7 @@ const formatTimestamp = (date: Date): string => {
 const markdownComponents = {
   h3: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => <h3 className="text-lg font-semibold mt-6 pt-3 border-t border-gray-200 mb-2" {...props} />,
   ul: ({ ...props }: React.HTMLAttributes<HTMLUListElement>) => <ul className="list-disc list-inside space-y-1 my-2" {...props} />,
-  ol: ({ ...props }: React.HTMLAttributes<HTMLOListElement>) => <ol className="list-decimal list-inside space-y-1 my-2" {...props} />,
+  ol: ({ ...props }: React.HTMLAttributes<HTMLOListElement>) => <ol className="list-decimal list-outside ml-5 space-y-1 my-2" {...props} />,
   li: ({ ...props }: React.HTMLAttributes<HTMLLIElement>) => <li className="pl-2 mb-1" {...props} />,
   p: ({ ...props }: React.HTMLAttributes<HTMLParagraphElement>) => <p className="mb-2" {...props} />,
   a: ({ ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />,
@@ -80,6 +81,7 @@ const markdownComponents = {
 
 export default function WelcomePage() {
   const [currentStep, setCurrentStep] = useState<Step>("initial")
+  const [userRole, setUserRole] = useState<UserRole>(null) // Nouvel état pour le rôle
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([])
   const [birthdate, setBirthdate] = useState<string>("")
   const [birthdateError, setBirthdateError] = useState<string>("")
@@ -93,6 +95,21 @@ export default function WelcomePage() {
   const chatContainerRef = useRef<HTMLElement>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
+  const handleGoHome = () => {
+    setCurrentStep("initial");
+    setUserRole(null); // Réinitialiser le rôle
+    setSelectedCategory(null);
+    setMessages([]);
+    setHistory([]);
+    setUserAnswers({});
+    setCurrentQuestionIndex(0);
+    setQuestion("");
+    setSelectedDocuments([]);
+    setBirthdate("");
+    setBirthdateError("");
+    setSidebarOpen(false);
+  };
+
   // Questions pour la catégorie Santé
   const healthQuestions: Question[] = [
     {
@@ -104,6 +121,16 @@ export default function WelcomePage() {
       ],
       historyLabel: (answerId) =>
         answerId === "oui" ? "✅ Numéro de sécurité sociale" : "❌ Pas de numéro de sécurité sociale",
+    },
+    {
+      id: "num-secu-provisoire",
+      question: "Est-ce un numéro de sécurité sociale provisoire ?",
+      buttons: [
+        { id: "oui-provisoire", label: "Oui", icon: "👍" },
+        { id: "non-provisoire", label: "Non", icon: "👎" },
+      ],
+      historyLabel: (answerId) =>
+        answerId === "oui-provisoire" ? "✅ Numéro provisoire" : "❌ Numéro non provisoire",
     },
     {
       id: "handicap",
@@ -126,19 +153,20 @@ export default function WelcomePage() {
   ]
 
   const documents: Document[] = [
-    { id: "recepisse", label: "Récépissé de demande d'asile" },
     { id: "attestation-ofpra", label: "Attestation OFPRA / Décision OFPRA / CNDA" },
     { id: "attestation-ada", label: "Attestation de demande d'asile (ADA)" },
-    { id: "carte-subsidiaire", label: 'Carte de séjour "protection subsidiaire"' },
-    { id: "carte-refugie", label: 'Carte de séjour "réfugié"' },
-    { id: "convocation", label: "Convocation à la préfecture" },
+    { id: "attestation-api", label: "Attestation prolongation d'instruction (API)" },
+    { id: "carte-sejour", label: "Carte de séjour" },
+    { id: "titre-sejour", label: "Titre de séjour" },
+    { id: "passeport", label: "Passeport" },
+    { id: "carte-ame", label: "Carte AME" },
     { id: "aucun", label: "Aucun de ces documents" },
   ]
 
   const categories: Category[] = [
     {
       id: "sante",
-      icon: "🏥",
+      icon: { src: "/logo_ameli.png", alt: "Logo Ameli" },
       title: "Santé",
       description: "Vous avez besoin d'aide en matière de santé",
     },
@@ -167,10 +195,7 @@ export default function WelcomePage() {
     // Simple validation for DD/MM/YYYY format
     const regex = /^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/
 
-    if (!birthdate) {
-      setBirthdateError("Veuillez entrer votre date de naissance")
-      return false
-    } else if (!regex.test(birthdate)) {
+    if (birthdate && !regex.test(birthdate)) {
       setBirthdateError("Format invalide. Utilisez JJ/MM/AAAA")
       return false
     }
@@ -298,7 +323,7 @@ export default function WelcomePage() {
       const newHistoryItem: HistoryItem = {
         id: `hist-${Date.now()}`,
         type: "category",
-        content: `${category.icon} Catégorie ${category.title}`,
+        content: `${typeof category.icon === 'string' ? category.icon : category.icon.alt} Catégorie ${category.title}`,
         category: categoryId,
         timestamp: new Date(),
       }
@@ -308,7 +333,7 @@ export default function WelcomePage() {
       const introMessage: Message = {
         id: `msg-${Date.now()}`,
         sender: "assistant",
-        content: `${category.icon} Vous avez choisi : ${category.title}\nJe vais poser quelques petites questions.\nC'est pour mieux comprendre votre situation.\nC'est rapide. Vous pouvez arrêter quand vous voulez.`,
+        content: `${typeof category.icon === 'string' ? category.icon : category.icon.alt} Vous avez choisi : ${category.title}\nJe vais poser quelques petites questions.\nC'est pour mieux comprendre votre situation.\nC'est rapide. Vous pouvez arrêter quand vous voulez.`,
         timestamp: new Date(),
         showButtons: true,
         buttons: [{ id: "agree", label: "D'accord", icon: "👍" }],
@@ -522,11 +547,11 @@ export default function WelcomePage() {
   // Affichage des écrans d'onboarding
   if (currentStep !== "dashboard") {
     return (
-      <div className="min-h-screen bg-[#faf9f6] flex items-center justify-center p-2 sm:p-4">
-        <div className="w-full max-w-7xl mx-auto flex flex-col lg:flex-row lg:items-baseline gap-8 sm:gap-12 lg:gap-24 py-6 sm:py-12">
-          {/* Left Section - Always the same */}
-          <div className="flex-1 space-y-6 sm:space-y-8">
-            <div className="flex flex-col items-center lg:items-start">
+      <div className="min-h-screen flex flex-col lg:flex-row">
+        {/* Left Section - White Background */}
+        <div className="lg:w-1/2 bg-[#faf9f6] flex items-center justify-center p-6 sm:p-12 order-2 lg:order-1">
+          <div className="w-full max-w-md space-y-6 sm:space-y-8 text-center">
+            <div className="flex flex-col items-center">
               <div className="mb-4">
                 <Image
                   src="/placeholder.svg?height=80&width=80"
@@ -536,75 +561,88 @@ export default function WelcomePage() {
                   className="rounded-full"
                 />
               </div>
-              <h1 className="text-2xl sm:text-4xl font-bold text-[#000000] mb-2 text-center lg:text-left">
+              <h1 className="text-3xl sm:text-4xl font-bold text-gray-800 mb-2 text-center">
                 Bienvenue sur l&apos;assistant
               </h1>
-              <p className="text-[#73726d] text-base sm:text-lg text-center lg:text-left">
+              <p className="text-gray-600 text-base sm:text-lg text-center">
                 Je suis un outil pensé pour vous aider à trouver les bonnes infos
               </p>
             </div>
 
-            <div className="space-y-4 sm:space-y-6">
-              <h2 className="text-xl sm:text-2xl font-semibold text-[#000000]">Comment ça marche ?</h2>
-              <ol className="space-y-2 sm:space-y-4">
-                <li className="flex gap-2 sm:gap-3">
-                  <span className="font-bold text-[#000000] min-w-[20px]">1</span>
-                  <span className="text-[#414143] text-sm sm:text-base">Vous choisissez votre rôle</span>
-                </li>
-                <li className="flex gap-2 sm:gap-3">
-                  <span className="font-bold text-[#000000] min-w-[20px]">2</span>
-                  <span className="text-[#414143] text-sm sm:text-base">On vous pose quelques questions simples</span>
-                </li>
-                <li className="flex gap-2 sm:gap-3">
-                  <span className="font-bold text-[#000000] min-w-[20px]">3</span>
-                  <span className="text-[#414143] text-sm sm:text-base">
-                    L&apos;assistant vous propose des infos fiables et personnalisées
-                  </span>
-                </li>
-              </ol>
-            </div>
+            {currentStep !== "documents" && (
+              <div className="space-y-4 sm:space-y-6 text-left">
+                <h2 className="text-xl font-semibold text-gray-700">Comment ça marche ?</h2>
+                <ol className="space-y-3">
+                  <li className="flex gap-3">
+                    <span className="font-semibold text-gray-700 min-w-[16px]">1</span>
+                    <span className="text-gray-600 text-sm sm:text-base">Vous choisissez votre rôle</span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="font-semibold text-gray-700 min-w-[16px]">2</span>
+                    <span className="text-gray-600 text-sm sm:text-base">On vous pose quelques questions simples</span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="font-semibold text-gray-700 min-w-[16px]">3</span>
+                    <span className="text-gray-600 text-sm sm:text-base">
+                      L&apos;assistant vous propose des infos fiables et personnalisées
+                    </span>
+                  </li>
+                </ol>
+              </div>
+            )}
 
-            <div className="flex items-center gap-2 text-[#414143] text-sm sm:text-base">
-              <Sparkles className="h-5 w-5 text-yellow-400" />
-              <span>C&apos;est rapide, gratuit et sans inscription</span>
-            </div>
+            {currentStep !== "documents" && (
+              <div className="flex items-center gap-2 text-gray-600 text-sm sm:text-base justify-center pt-2">
+                <Sparkles className="h-4 w-4 text-yellow-500" />
+                <span>C&apos;est rapide, gratuit et sans inscription</span>
+              </div>
+            )}
           </div>
+        </div>
 
-          {/* Right Section - Changes based on current step */}
-          <div className="flex-1 space-y-4 sm:space-y-6">
+        {/* Right Section - Brown Background */}
+        <div className="lg:w-1/2 bg-white flex flex-col justify-center items-center p-6 sm:p-12 order-1 lg:order-2">
+          <div className="w-full max-w-md space-y-4 sm:space-y-6">
             {currentStep === "initial" && (
               // Initial screen with role selection
               <>
-                <div className="text-center lg:text-left">
+                <div className="text-center">
                   <h2 className="text-xl sm:text-2xl font-semibold text-[#000000] mb-2 sm:mb-4">Et vous, qui êtes-vous ?</h2>
                   <p className="text-[#73726d] mb-1 sm:mb-2 text-sm sm:text-base">Vous êtes ici pour aider ou pour être accompagné ?</p>
                   <p className="text-[#73726d] text-sm sm:text-base">Choisissez votre parcours</p>
                 </div>
 
-                <div className="space-y-3 sm:space-y-4 max-w-md mx-auto lg:mx-0">
-                  <button
-                    className="w-full bg-[#000000] text-white rounded-lg p-3 sm:p-4 flex items-center justify-center gap-2 hover:bg-opacity-90 transition-all text-base sm:text-lg"
-                    onClick={() => setCurrentStep("intro")}
-                  >
-                    <span className="text-yellow-400">👤</span>
-                    <div className="text-left">
-                      <div className="font-medium">Accompagnant.e</div>
-                      <div className="text-xs sm:text-sm text-gray-300">(Travailleur social, bénévole)</div>
-                    </div>
-                  </button>
+                <div className="max-w-md mx-auto">
+                  <div className="flex flex-row gap-3 sm:gap-4">
+                    <button
+                      className="w-full bg-[#000000] text-white rounded-lg p-3 sm:p-4 flex items-center justify-center gap-2 hover:bg-opacity-90 transition-all text-base sm:text-lg"
+                      onClick={() => {
+                        setUserRole("accompagnant");
+                        setCurrentStep("intro");
+                      }}
+                    >
+                      <span className="text-yellow-400">👤</span>
+                      <div className="text-left">
+                        <div className="font-medium">Accompagnant.e</div>
+                        <div className="text-xs sm:text-sm text-gray-300">(Travailleur social, bénévole)</div>
+                      </div>
+                    </button>
 
-                  <button
-                    className="w-full bg-[#000000] text-white rounded-lg p-3 sm:p-4 flex items-center justify-center gap-2 hover:bg-opacity-90 transition-all text-base sm:text-lg"
-                    onClick={() => setCurrentStep("intro")}
-                  >
-                    <span className="text-yellow-400">👤</span>
-                    <div className="text-left">
-                      <div className="font-medium">Accompagné.e</div>
-                      <div className="text-xs sm:text-sm text-gray-300">(Je cherche un logement)</div>
-                    </div>
-                  </button>
-
-                  <p className="text-xs text-center text-[#73726d] mt-2">
+                    <button
+                      className="w-full bg-[#000000] text-white rounded-lg p-3 sm:p-4 flex items-center justify-center gap-2 hover:bg-opacity-90 transition-all text-base sm:text-lg"
+                      onClick={() => {
+                        setUserRole("accompagne");
+                        setCurrentStep("intro");
+                      }}
+                    >
+                      <span className="text-yellow-400">👤</span>
+                      <div className="text-left">
+                        <div className="font-medium">Accompagné.e</div>
+                        <div className="text-xs sm:text-sm text-gray-300">(Je cherche un logement)</div>
+                      </div>
+                    </button>
+                  </div>
+                  <p className="text-xs text-center text-[#73726d] mt-3">
                     Ce choix permet d&apos;adapter l&apos;assistant à votre besoin
                   </p>
                 </div>
@@ -616,7 +654,9 @@ export default function WelcomePage() {
               <div className="flex flex-col items-center lg:items-start justify-center h-full">
                 <div className="border border-[#c8c6c6] rounded-lg p-6 bg-white mb-6 w-full">
                   <p className="text-[#414143]">
-                    Maintenant je vais vous poser des questions pour bien comprendre ta situation
+                    {userRole === "accompagnant" 
+                      ? "Maintenant je vais vous poser des questions sur la personne que vous accompagnez"
+                      : "Maintenant je vais vous poser des questions pour bien comprendre votre situation"}
                   </p>
                 </div>
 
@@ -634,16 +674,24 @@ export default function WelcomePage() {
 
             {currentStep === "documents" && (
               // Third screen with document selection
-              <div className="space-y-6">
-                <div className="text-center lg:text-left">
-                  <h2 className="text-2xl font-semibold text-[#000000] mb-4">
-                    <span className="mr-2">📄</span>
-                    Quels documents avez-vous ?
+              <div className="space-y-5">
+                <div> 
+                  <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 mb-1.5">
+                    <span className="mr-1.5">
+                      {userRole === "accompagnant" ? "🪪" : "📄"}
+                    </span>
+                    {userRole === "accompagnant" 
+                      ? "Quels sont les documents dont elle dispose ?"
+                      : "Quels documents avez-vous ?"}
                   </h2>
-                  <p className="text-[#73726d]">Vous pouvez sélectionner plusieurs documents</p>
+                  <p className="text-gray-500 text-xs sm:text-sm">
+                    {userRole === "accompagnant"
+                      ? "Vous pouvez sélectionner plusieurs documents pour cette personne"
+                      : "Vous pouvez sélectionner plusieurs documents"}
+                  </p>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {documents.map((doc) => (
                     <div key={doc.id} className="flex items-start gap-2">
                       <input
@@ -651,22 +699,22 @@ export default function WelcomePage() {
                         id={doc.id}
                         checked={selectedDocuments.includes(doc.id)}
                         onChange={() => toggleDocument(doc.id)}
-                        className="mt-1"
+                        className="mt-0.5 h-3.5 w-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                       />
-                      <label htmlFor={doc.id} className="text-[#414143] cursor-pointer">
+                      <label htmlFor={doc.id} className="text-gray-600 text-xs sm:text-sm cursor-pointer">
                         {doc.label}
                       </label>
                     </div>
                   ))}
                 </div>
 
-                <div className="flex justify-end pt-4">
+                <div className="flex justify-center pt-3"> 
                   <button
-                    className="rounded-full px-4 py-2 bg-[#f5f5f5] text-[#414143] flex items-center gap-2 hover:bg-gray-200 transition-all"
+                    className="rounded-full px-4 py-2 bg-gray-800 text-white text-xs font-medium hover:bg-gray-700 transition-all flex items-center gap-1.5"
                     onClick={() => setCurrentStep("birthdate")}
                   >
-                    <span>👍</span>
                     <span>Continuer</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
                   </button>
                 </div>
               </div>
@@ -677,9 +725,14 @@ export default function WelcomePage() {
               <div className="space-y-6">
                 <div className="text-center lg:text-left">
                   <h2 className="text-2xl font-semibold text-[#000000] mb-4">
-                    <span className="mr-2">📅</span>
-                    Quelle est votre date de naissance ?
+                    <span className="mr-2">
+                      {userRole === "accompagnant" ? "🗓️" : "📅"}
+                    </span>
+                    {userRole === "accompagnant"
+                      ? "Quelle est sa date de naissance ?"
+                      : "Quelle est votre date de naissance ?"}
                   </h2>
+                  {/* Le placeholder et la gestion d'erreur peuvent rester génériques ou être adaptés si besoin */}
                 </div>
 
                 <div className="flex flex-col items-center lg:items-start">
@@ -717,35 +770,36 @@ export default function WelcomePage() {
   // Affichage du tableau de bord principal (après l'onboarding)
   return (
     <div className="h-screen bg-gray-50 flex text-gray-800 relative">
-      {/* Bouton d'ouverture sidebar mobile */}
+      {/* Bouton d'ouverture sidebar - visible sur tous les écrans */}
       <button
-        className="md:hidden absolute top-3 left-3 z-50 bg-white border border-gray-200 rounded-full p-2 shadow"
+        className={`absolute top-3 left-3 z-50 bg-white border border-gray-200 rounded-full p-2 shadow transition-opacity duration-300 ${sidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
         onClick={() => setSidebarOpen(true)}
         aria-label="Ouvrir le menu"
       >
         <Menu className="h-6 w-6" />
       </button>
-      {/* Sidebar responsive */}
-      {/* Overlay mobile */}
+
+      {/* Overlay - visible sur tous les écrans quand sidebar ouverte */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-40 bg-black/30 md:hidden" onClick={() => setSidebarOpen(false)}></div>
+        <div className="fixed inset-0 z-30 bg-black/30" onClick={() => setSidebarOpen(false)}></div>
       )}
+
+      {/* Sidebar responsive - maintenant contrôlée par sidebarOpen sur tous les écrans */}
       <div
         className={`
           bg-white border-r border-gray-200 flex flex-col
-          w-80 md:static md:translate-x-0 md:w-80
-          fixed top-0 left-0 h-full z-50 transition-transform duration-200
+          w-80 fixed top-0 left-0 h-full z-40 transition-transform duration-300 transform
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-          md:relative md:flex md:translate-x-0
         `}
         style={{ maxWidth: 320 }}
         tabIndex={-1}
         aria-label="Sidebar"
+        aria-hidden={!sidebarOpen}
       >
-        {/* Bouton de fermeture mobile */}
-        <div className="md:hidden flex justify-end p-2">
+        {/* Bouton de fermeture à l'intérieur de la sidebar */}
+        <div className="flex justify-end p-2">
           <button
-            className="bg-gray-100 rounded-full p-2"
+            className="bg-gray-100 rounded-full p-2 hover:bg-gray-200"
             onClick={() => setSidebarOpen(false)}
             aria-label="Fermer le menu"
           >
@@ -753,21 +807,50 @@ export default function WelcomePage() {
           </button>
         </div>
         <div className="p-6 flex-1 overflow-y-auto">
-          <h2 className="text-xl font-semibold text-gray-900 mb-1">Vos Questions</h2>
-          <p className="text-sm text-gray-500 mb-6">Résumé et liens utiles</p>
-          <div className="border border-gray-200 rounded-lg p-3 min-h-[160px]">
+          {/* Titre "Historique" - sans Chevron ni onClick pour expand/collapse */}
+          <h2 className="text-xl font-semibold text-gray-900 mb-1">Historique</h2>
+          <p className="text-sm text-gray-500 mb-6">Résumé de votre parcours</p>
+          
+          {/* Contenu de l'historique - plus de classes de transition max-height/opacity ici */}
+          <div className="border border-gray-200 rounded-lg p-3 min-h-[100px]">
             {history.length > 0 ? (
               <ul className="w-full space-y-1.5">
-                {history.map((item) => (
-                  <li key={item.id} className="text-sm flex items-center gap-2 text-gray-700 p-1 rounded hover:bg-gray-100">
-                    <CheckCircle className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                    <span className="truncate flex-1">{item.content}</span>
-                  </li>
-                ))}
+                {history.map((item) => {
+                  let IconComponent = RefreshCw;
+                  let iconColor = "text-gray-500";
+                  switch (item.type) {
+                    case "category":
+                      IconComponent = FolderKanban;
+                      iconColor = "text-purple-500";
+                      break;
+                    case "answer":
+                      if (healthQuestions.some(q => q.historyLabel && item.content.startsWith(q.historyLabel("").split(" ")[0]))) {
+                         IconComponent = ClipboardCheck;
+                         iconColor = "text-green-500";
+                      } else {
+                         IconComponent = MessageSquareText;
+                         iconColor = "text-blue-500";
+                      }
+                      break;
+                    case "question":
+                      IconComponent = HelpCircle;
+                      iconColor = "text-orange-500";
+                      break;
+                    default:
+                      break;
+                  }
+                  return (
+                    <li key={item.id} className="text-sm flex items-start gap-2 text-gray-700 p-1 rounded hover:bg-gray-100">
+                      <IconComponent className={`h-4 w-4 ${iconColor} mt-0.5 flex-shrink-0`} />
+                      <span className="flex-1 break-words">{item.content}</span>
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
-              <div className="h-full flex items-center justify-center text-gray-400">
-                <RefreshCw className="h-6 w-6" />
+              <div className="h-full flex flex-col items-center justify-center text-gray-400 py-4">
+                <RefreshCw className="h-6 w-6 mb-1" />
+                <span>L'historique est vide</span>
               </div>
             )}
           </div>
@@ -790,10 +873,15 @@ export default function WelcomePage() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header dynamique */}
-        <header className="border-b border-gray-200 p-4 bg-white shadow-sm">
-          <h2 className="text-lg font-medium text-center text-gray-900">
-            {selectedCategoryData ? `${selectedCategoryData.icon} ${selectedCategoryData.title}` : "Assistant Triptek"}
-          </h2>
+        <header className="border-b border-gray-200 p-4 bg-white shadow-sm flex justify-center items-center">
+          <button 
+            onClick={handleGoHome} 
+            className="text-xl font-semibold text-gray-800 hover:text-blue-600 transition-colors duration-150 flex items-center gap-2"
+            title="Retour à l'accueil"
+          >
+            <Image src="/placeholder.svg?height=32&width=32" alt="Logo Triptek" width={32} height={32} className="rounded-full" />
+            Assistant Triptek
+          </button>
         </header>
 
         <main ref={chatContainerRef} className="flex-1 p-6 md:p-8 overflow-y-auto scroll-smooth bg-gray-50">
@@ -812,8 +900,14 @@ export default function WelcomePage() {
                     className="border border-gray-200 rounded-xl p-6 flex flex-col items-center text-center bg-white hover:shadow-lg hover:border-blue-300 transition-all duration-200 cursor-pointer"
                     onClick={() => handleCategorySelect(category.id)}
                   >
-                    <span className="text-3xl mb-3">{category.icon}</span>
-                    <h3 className="font-medium text-gray-800 mb-1.5">{category.title}</h3>
+                    {typeof category.icon === 'string' ? (
+                      <span className="text-3xl mb-3">{category.icon}</span>
+                    ) : (
+                      <Image src={category.icon.src} alt={category.icon.alt} width={80} height={80} className="mb-3" />
+                    )}
+                    {category.id !== "sante" && (
+                      <h3 className="font-medium text-gray-800 mb-1.5">{category.title}</h3>
+                    )}
                     <p className="text-sm text-gray-500 leading-relaxed">{category.description}</p>
                   </div>
                 ))}
@@ -827,7 +921,7 @@ export default function WelcomePage() {
                   <div key={message.id} className="space-y-2">
                     <div className={`flex ${message.sender === "assistant" ? "justify-start" : "justify-end"}`}>
                       <div
-                        className={`max-w-[85%] p-3 md:p-4 rounded-xl shadow-sm ${
+                        className={`p-3 md:p-4 rounded-xl shadow-sm max-w-[95%] md:max-w-[85%] ${
                           message.sender === "assistant"
                             ? "bg-white text-gray-800 rounded-bl-none"
                             : "bg-blue-600 text-white rounded-br-none"
@@ -905,7 +999,7 @@ export default function WelcomePage() {
                 {/* Indicateur de chargement */} 
                 {isLoading && (
                   <div className="flex justify-start">
-                     <div className="max-w-[85%] p-3 md:p-4 rounded-xl shadow-sm bg-white text-gray-800 rounded-bl-none">
+                     <div className="max-w-[95%] md:max-w-[85%] p-3 md:p-4 rounded-xl shadow-sm bg-white text-gray-800 rounded-bl-none">
                        <div className="flex items-center mb-1.5">
                          <span className="mr-2 text-lg">😊</span>
                          <span className="font-medium text-sm text-gray-700">Assistant Triptek</span>
