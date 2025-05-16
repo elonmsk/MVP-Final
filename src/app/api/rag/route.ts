@@ -60,7 +60,7 @@ console.log("Initialisation des clients terminée.");
 // --- Types et Schémas ---
 const QueryRequestSchema = z.object({
   question: z.string().min(1, "La question ne peut pas être vide."),
-  threshold: z.number().min(0).max(1).default(0.45),
+  threshold: z.number().min(0).max(1).default(0.60),
   k: z.number().int().positive().default(5),
   qualificationContext: z.string().optional(),
 });

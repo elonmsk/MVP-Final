@@ -3,13 +3,65 @@
 import type React from "react"
 
 import Image from "next/image"
-import { Sparkles, Check, Send, Lock, RefreshCw, Menu, FolderKanban, ClipboardCheck, HelpCircle, MessageSquareText } from "lucide-react"
+import { Sparkles, Check, Send, Lock, Menu, MessageSquareText } from "lucide-react"
 import { useState, useRef, useEffect } from "react"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-type Step = "initial" | "intro" | "documents" | "birthdate" | "dashboard"
-type UserRole = "accompagnant" | "accompagne" | null // Ajout du type pour le rôle utilisateur
+type Step = "initial" | "intro" | "documents" | "birthdate" | "dashboard" | "login" | "register"
+type UserRole = "accompagnant" | "accompagne" | null
+
+// Nouveaux types pour l'historique
+export type HistoryEntryType =
+  | "category_selection"
+  | "qualification_step"
+  | "user_query"
+  | "assistant_reply";
+
+interface BaseHistoryItem {
+  id: string;
+  type: HistoryEntryType;
+  timestamp: Date;
+}
+
+interface CategorySelectionHistoryItem extends BaseHistoryItem {
+  type: "category_selection";
+  data: {
+    categoryTitle: string;
+    categoryIcon?: string | { src: string; alt: string }; // Pour gérer les deux types d'icônes
+  };
+}
+
+interface QualificationStepHistoryItem extends BaseHistoryItem {
+  type: "qualification_step";
+  data: {
+    questionText: string;
+    answerText: string;
+    answerIcon?: string; // L'icône du bouton de réponse (ex: 👍)
+  };
+}
+
+interface UserQueryHistoryItem extends BaseHistoryItem {
+  type: "user_query";
+  data: {
+    queryText: string;
+    isSuggestion?: boolean; // Pour différencier les questions tapées des suggestions cliquées
+    suggestionIcon?: string; // Icône de la suggestion si applicable
+  };
+}
+
+interface AssistantReplyHistoryItem extends BaseHistoryItem {
+  type: "assistant_reply";
+  data: {
+    replyText: string; // Le contenu Markdown de la réponse
+  };
+}
+
+export type HistoryItem = 
+  | CategorySelectionHistoryItem 
+  | QualificationStepHistoryItem 
+  | UserQueryHistoryItem 
+  | AssistantReplyHistoryItem;
 
 interface Document {
   id: string
@@ -42,15 +94,6 @@ interface Message {
   }[]
 }
 
-interface HistoryItem {
-  id: string
-  type: "category" | "question" | "answer"
-  content: string
-  category?: string
-  timestamp: Date
-  icon?: string
-}
-
 interface Question {
   id: string
   question: string
@@ -62,6 +105,36 @@ interface Question {
   historyLabel: (answerId: string) => string
   historyIcon?: string
 }
+
+// Nouvelle interface pour une conversation individuelle
+interface ConversationSessionData {
+  messages: Message[];
+  history: HistoryItem[]; 
+  currentStep: Step;
+  userRole: UserRole;
+  selectedCategory: string | null;
+  userAnswers: Record<string, string>;
+  currentQuestionIndex: number;
+  email: string; // Email de la session de connexion (si pertinent pour cette conv)
+  birthdate: string; // Date de naissance de la session (si pertinent pour cette conv)
+  // Les erreurs (loginError, registerError, etc.) sont transitoires et ne sont pas stockées par conversation
+}
+
+interface Conversation {
+  id: string;
+  name: string;
+  lastActivity: number; // Timestamp numérique pour le tri
+  sessionData: ConversationSessionData;
+}
+
+// Nouvelle structure pour localStorage
+interface AppStorage {
+  conversations: Conversation[];
+  activeConversationId: string | null;
+}
+
+// Clé localStorage mise à jour
+const APP_STORAGE_KEY = "triptekAssistantSessions_v2"; // v2 pour indiquer la nouvelle structure
 
 // Helper function to format timestamp
 const formatTimestamp = (date: Date): string => {
@@ -81,7 +154,14 @@ const markdownComponents = {
 
 export default function WelcomePage() {
   const [currentStep, setCurrentStep] = useState<Step>("initial")
-  const [userRole, setUserRole] = useState<UserRole>(null) // Nouvel état pour le rôle
+  const [userRole, setUserRole] = useState<UserRole>(null)
+  const [email, setEmail] = useState<string>("")
+  const [password, setPassword] = useState<string>("")
+  const [loginError, setLoginError] = useState<string>("")
+  const [registerEmail, setRegisterEmail] = useState<string>("")
+  const [registerPassword, setRegisterPassword] = useState<string>("")
+  const [confirmPassword, setConfirmPassword] = useState<string>("")
+  const [registerError, setRegisterError] = useState<string>("")
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([])
   const [birthdate, setBirthdate] = useState<string>("")
   const [birthdateError, setBirthdateError] = useState<string>("")
@@ -95,19 +175,363 @@ export default function WelcomePage() {
   const chatContainerRef = useRef<HTMLElement>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const handleGoHome = () => {
-    setCurrentStep("initial");
-    setUserRole(null); // Réinitialiser le rôle
-    setSelectedCategory(null);
-    setMessages([]);
-    setHistory([]);
-    setUserAnswers({});
-    setCurrentQuestionIndex(0);
+  // Nouveaux états pour gérer plusieurs conversations
+  const [allConversations, setAllConversations] = useState<Conversation[]>([])
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
+
+  // Nouveaux états pour la modale de confirmation de suppression
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState<boolean>(false);
+  const [conversationToDeleteId, setConversationToDeleteId] = useState<string | null>(null);
+
+  // Helper pour générer un nom de conversation par défaut
+  const generateDefaultConversationName = (currentMessages: Message[]): string => {
+    const firstUserMessage = currentMessages.find(m => m.sender === 'user')
+    if (firstUserMessage && firstUserMessage.content.trim()) {
+      return firstUserMessage.content.trim().substring(0, 30) + (firstUserMessage.content.trim().length > 30 ? "..." : "")
+    }
+    return "Nouvelle conversation"
+  }
+
+  // Effet pour charger l'état depuis localStorage au montage initial
+  useEffect(() => {
+    const savedStorage = localStorage.getItem(APP_STORAGE_KEY)
+    if (savedStorage) {
+      try {
+        const parsedStorage: AppStorage = JSON.parse(savedStorage)
+        if (parsedStorage.conversations) {
+          const loadedConversations = parsedStorage.conversations.map(conv => ({
+            ...conv,
+            sessionData: {
+              ...conv.sessionData,
+              messages: conv.sessionData.messages.map(msg => ({ ...msg, timestamp: new Date(msg.timestamp) })),
+              history: conv.sessionData.history.map(item => ({ ...item, timestamp: new Date(item.timestamp) })),
+            }
+          }))
+          setAllConversations(loadedConversations)
+
+          let convIdToLoad = parsedStorage.activeConversationId
+          if (!convIdToLoad && loadedConversations.length > 0) {
+            // Charger la plus récente si aucun ID actif n'est sauvegardé
+            convIdToLoad = loadedConversations.sort((a, b) => b.lastActivity - a.lastActivity)[0].id
+          }
+          
+          if (convIdToLoad) {
+            const activeConv = loadedConversations.find(c => c.id === convIdToLoad)
+            if (activeConv) {
+              // Charger les données de la session active
+              const { sessionData } = activeConv
+              setMessages(sessionData.messages)
+              setHistory(sessionData.history)
+              setCurrentStep(sessionData.currentStep)
+              setUserRole(sessionData.userRole)
+              setSelectedCategory(sessionData.selectedCategory)
+              setUserAnswers(sessionData.userAnswers)
+              setCurrentQuestionIndex(sessionData.currentQuestionIndex)
+              setEmail(sessionData.email)
+              setBirthdate(sessionData.birthdate)
+              setActiveConversationId(activeConv.id)
+            } else { // Si l'ID actif n'est pas trouvé, démarrer une nouvelle conversation
+              createNewConversation(loadedConversations, true) 
+            }
+          } else { // Aucune conversation, en créer une nouvelle
+            createNewConversation([], true) 
+          }
+        } else { // Pas de conversations dans le storage, en créer une nouvelle
+           createNewConversation([], true) 
+        }
+      } catch (error) {
+        console.error("Erreur lors de la restauration des sessions depuis localStorage:", error)
+        localStorage.removeItem(APP_STORAGE_KEY) // Supprimer les données corrompues
+        createNewConversation([], true) // Démarrer avec une nouvelle conversation propre
+      }
+    } else { // Pas de storage, en créer une nouvelle
+      createNewConversation([], true) 
+    }
+  }, []) // Exécuter une seule fois au montage
+
+  // Effet pour sauvegarder l'état dans localStorage lors de changements
+  useEffect(() => {
+    if (!activeConversationId && allConversations.length === 0 && messages.length === 0) {
+        // Ne pas sauvegarder si tout est vide et qu'aucune conversation active n'est définie (état initial avant création)
+        return
+    }
+    if(activeConversationId) { // Sauvegarder seulement si une conversation est active
+        const currentConversationData: ConversationSessionData = {
+            messages,
+            history,
+            currentStep,
+            userRole,
+            selectedCategory,
+            userAnswers,
+            currentQuestionIndex,
+            email,
+            birthdate,
+        }
+
+        const updatedConversations = allConversations.map(conv => 
+            conv.id === activeConversationId 
+            ? { 
+                ...conv, 
+                sessionData: currentConversationData, 
+                lastActivity: Date.now(), 
+                name: conv.name === "Nouvelle conversation" && messages.length > 0 ? generateDefaultConversationName(messages) : conv.name 
+              } 
+            : conv
+        )
+        
+        // S'assurer que la conversation active est bien dans la liste (au cas où elle vient d'être créée)
+        if (!updatedConversations.some(c => c.id === activeConversationId)) {
+            // Ce cas devrait être géré par createNewConversation, mais sécurité
+            const newConv: Conversation = {
+                id: activeConversationId,
+                name: generateDefaultConversationName(messages),
+                lastActivity: Date.now(),
+                sessionData: currentConversationData
+            }
+            updatedConversations.push(newConv)
+        }
+
+        setAllConversations(updatedConversations) // Mettre à jour l'état local des conversations
+
+        const newStorage: AppStorage = {
+            conversations: updatedConversations,
+            activeConversationId,
+        }
+        localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(newStorage))
+    }
+  }, [
+    messages, history, currentStep, userRole, selectedCategory, userAnswers, 
+    currentQuestionIndex, email, birthdate, activeConversationId, allConversations // Ajout de allConversations
+  ])
+
+
+  const createNewConversation = (currentListOfConversations: Conversation[], isInitialLoad = false) => {
+    const newConversationId = `conv_${Date.now()}`;
+    const newConversation: Conversation = {
+      id: newConversationId,
+      name: "Nouvelle conversation",
+      lastActivity: Date.now(),
+      sessionData: {
+        messages: [],
+        history: [],
+        currentStep: "dashboard", // Démarrer directement sur le dashboard
+        userRole: null, // Rôle non défini pour une nouvelle conversation
+        selectedCategory: null, // Aucune catégorie sélectionnée au début
+        userAnswers: {},
+        currentQuestionIndex: 0,
+        email: "",
+        birthdate: "",
+      },
+    };
+
+    const updatedListOfConversations = [...currentListOfConversations, newConversation];
+    if (!isInitialLoad) { 
+        setAllConversations(updatedListOfConversations);
+    } else {
+        // Pour le chargement initial, si on crée une nouvelle conv, il faut aussi mettre à jour allConversations
+        // Ceci est important si le localStorage était vide ou corrompu.
+        setAllConversations(updatedListOfConversations); 
+    }
+    
+    // Charger les états de la nouvelle conversation
+    setMessages(newConversation.sessionData.messages);
+    setHistory(newConversation.sessionData.history);
+    setCurrentStep(newConversation.sessionData.currentStep); // Sera "dashboard"
+    setUserRole(newConversation.sessionData.userRole);
+    setSelectedCategory(newConversation.sessionData.selectedCategory); // Sera null
+    setUserAnswers(newConversation.sessionData.userAnswers);
+    setCurrentQuestionIndex(newConversation.sessionData.currentQuestionIndex);
+    setEmail(newConversation.sessionData.email);
+    setBirthdate(newConversation.sessionData.birthdate);
+    // Réinitialiser les champs de formulaire temporaires
     setQuestion("");
+    setPassword("");
+    setLoginError("");
+    setRegisterEmail("");
+    setRegisterPassword("");
+    setConfirmPassword("");
+    setRegisterError("");
     setSelectedDocuments([]);
-    setBirthdate("");
     setBirthdateError("");
-    setSidebarOpen(false);
+
+    setActiveConversationId(newConversationId);
+    return newConversationId; // Retourner l'ID pour le chargement initial
+  }
+
+  const loadConversation = (conversationId: string) => {
+    const conversationToLoad = allConversations.find(conv => conv.id === conversationId)
+    if (conversationToLoad) {
+      const { sessionData } = conversationToLoad
+      setMessages(sessionData.messages.map(msg => ({ ...msg, timestamp: new Date(msg.timestamp) })))
+      setHistory(sessionData.history.map(item => ({ ...item, timestamp: new Date(item.timestamp) })))
+      setCurrentStep(sessionData.currentStep)
+      setUserRole(sessionData.userRole)
+      setSelectedCategory(sessionData.selectedCategory)
+      setUserAnswers(sessionData.userAnswers)
+      setCurrentQuestionIndex(sessionData.currentQuestionIndex)
+      setEmail(sessionData.email)
+      setBirthdate(sessionData.birthdate)
+      // Réinitialiser les champs de formulaire temporaires et erreurs
+      setQuestion("")
+      setPassword("")
+      setLoginError("")
+      setRegisterEmail("")
+      setRegisterPassword("")
+      setConfirmPassword("")
+      setRegisterError("")
+      setSelectedDocuments([])
+      setBirthdateError("")
+      
+      setActiveConversationId(conversationId)
+    }
+  }
+
+  const handleGoHome = () => {
+    const newConvId = createNewConversation(allConversations);
+    // Après création, forcer l'étape initiale si c'est un vrai "Go Home"
+    // Essayer de trouver la conversation dans la liste actuelle (elle devrait y être si createNewConversation l'a ajoutée)
+    const convToUpdate = allConversations.find(c => c.id === newConvId);
+
+    // Si elle n'est pas trouvée (ce qui pourrait arriver si createNewConversation est modifiée pour ne pas setter allConversations immédiatement
+    // ou si la liste passée à createNewConversation n'était pas la plus à jour), on la crée et on la récupère.
+    // Cependant, avec la logique actuelle, createNewConversation met à jour setAllConversations (sauf si isInitialLoad est true et qu'on est pas dans le useEffect de load)
+    // Pour simplifier, on part du principe que createNewConversation a bien mis à jour allConversations OU que l'ID est valide pour une nouvelle création.
+    
+    // Pour handleGoHome, on veut une nouvelle conversation configurée pour commencer à l'étape "initial"
+    const goHomeSessionData: ConversationSessionData = {
+        messages: [], history: [], currentStep: "initial", userRole: null, selectedCategory: null,
+        userAnswers: {}, currentQuestionIndex: 0, email: "", birthdate: "",
+    };
+
+    if (convToUpdate) { // Si la conversation a été trouvée (donc ajoutée par createNewConversation)
+        const updatedConv = { 
+            ...convToUpdate, 
+            sessionData: goHomeSessionData,
+            name: "Nouvelle conversation" // Réinitialiser le nom
+        };
+        const updatedList = allConversations.map(c => c.id === newConvId ? updatedConv : c);
+        setAllConversations(updatedList);
+        // Charger les états de cette conversation "Go Home"
+        setMessages(goHomeSessionData.messages);
+        setHistory(goHomeSessionData.history);
+        setCurrentStep(goHomeSessionData.currentStep);
+        setUserRole(goHomeSessionData.userRole);
+        setSelectedCategory(goHomeSessionData.selectedCategory);
+        setUserAnswers(goHomeSessionData.userAnswers);
+        setCurrentQuestionIndex(goHomeSessionData.currentQuestionIndex);
+        setEmail(goHomeSessionData.email);
+        setBirthdate(goHomeSessionData.birthdate);
+        setActiveConversationId(newConvId);
+    } else {
+        // Si createNewConversation n'a pas mis à jour allConversations et qu'on est ici,
+        // c'est un cas plus complexe. Pour l'instant, on force la création d'une nouvelle conversation
+        // avec les bons états pour "Go Home".
+        const forcedNewId = `conv_${Date.now()}_gohome`;
+        const forcedNewConv: Conversation = {
+            id: forcedNewId, name: "Nouvelle conversation", lastActivity: Date.now(), sessionData: goHomeSessionData
+        };
+        setAllConversations(prev => [...prev, forcedNewConv]);
+        setMessages(goHomeSessionData.messages);
+        setHistory(goHomeSessionData.history);
+        setCurrentStep(goHomeSessionData.currentStep);
+        setUserRole(goHomeSessionData.userRole);
+        setSelectedCategory(goHomeSessionData.selectedCategory);
+        setUserAnswers(goHomeSessionData.userAnswers);
+        setCurrentQuestionIndex(goHomeSessionData.currentQuestionIndex);
+        setEmail(goHomeSessionData.email);
+        setBirthdate(goHomeSessionData.birthdate);
+        setActiveConversationId(forcedNewId);
+    }
+    setSidebarOpen(false); 
+  };
+
+  const handleDeleteConversation = (conversationIdToDelete: string) => {
+    setConversationToDeleteId(conversationIdToDelete);
+    setShowDeleteConfirmModal(true);
+    // if (window.confirm("Êtes-vous sûr de vouloir supprimer cette conversation ?")) {
+    //   const updatedConversations = allConversations.filter(conv => conv.id !== conversationIdToDelete);
+    //   setAllConversations(updatedConversations);
+
+    //   if (activeConversationId === conversationIdToDelete) {
+    //     if (updatedConversations.length > 0) {
+    //       // Charger la plus récente des conversations restantes
+    //       const mostRecentConversation = [...updatedConversations].sort((a, b) => b.lastActivity - a.lastActivity)[0];
+    //       loadConversation(mostRecentConversation.id);
+    //     } else {
+    //       // S'il n'y a plus de conversations, en créer une nouvelle
+    //       createNewConversation([]);
+    //     }
+    //   } // Si la conversation supprimée n'était pas active, l'ID actif reste valide (ou sera géré par le useEffect de chargement).
+    // }
+  };
+
+  const confirmActualDelete = () => {
+    if (!conversationToDeleteId) return;
+
+    const updatedConversations = allConversations.filter(conv => conv.id !== conversationToDeleteId);
+    setAllConversations(updatedConversations);
+
+    if (activeConversationId === conversationToDeleteId) {
+      if (updatedConversations.length > 0) {
+        const mostRecentConversation = [...updatedConversations].sort((a, b) => b.lastActivity - a.lastActivity)[0];
+        loadConversation(mostRecentConversation.id);
+      } else {
+        createNewConversation([]);
+      }
+    }
+    setShowDeleteConfirmModal(false);
+    setConversationToDeleteId(null);
+  };
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError(""); // Réinitialiser les erreurs précédentes
+
+    // La vérification des champs obligatoires est supprimée ici
+    // if (!email || !password) {
+    //   setLoginError("Veuillez remplir tous les champs.");
+    //   return;
+    // }
+
+    // TODO: Implémenter une véritable logique de connexion ici
+    // Si les champs sont remplis, on peut toujours tenter de les utiliser
+    if (email || password) {
+      console.log("Tentative de connexion (optionnelle) avec:", { email, password });
+      // Ici, vous pourriez ajouter une logique pour tenter une vraie connexion si des identifiants sont fournis,
+      // mais sans bloquer l'utilisateur s'ils ne le sont pas ou si la connexion échoue.
+      // Pour l'instant, on logue simplement et on continue.
+    }
+
+    // On passe toujours à l'étape suivante
+    setCurrentStep("intro");
+  };
+
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRegisterError(""); // Réinitialiser les erreurs précédentes
+
+    if (!registerEmail || !registerPassword || !confirmPassword) {
+      setRegisterError("Veuillez remplir tous les champs.");
+      return;
+    }
+
+    if (registerPassword !== confirmPassword) {
+      setRegisterError("Les mots de passe ne correspondent pas.");
+      return;
+    }
+
+    // TODO: Implémenter une véritable logique d'inscription ici (ex: appel API)
+    console.log("Tentative d'inscription avec:", { email: registerEmail, password: registerPassword });
+
+    // Simulation d'un appel API pour l'inscription
+    // setIsLoading(true);
+    // await new Promise(resolve => setTimeout(resolve, 1000));
+    // setIsLoading(false);
+
+    // Pour cet exemple, on considère l'inscription réussie
+    // Dans un cas réel, vous pourriez vouloir connecter l'utilisateur automatiquement après l'inscription
+    // ou le rediriger vers la page de connexion avec un message de succès.
+    setCurrentStep("intro"); // Ou "login" pour qu'il se connecte après inscription
   };
 
   // Questions pour la catégorie Santé
@@ -227,8 +651,11 @@ export default function WelcomePage() {
     // Ajoute la question à l'historique
     const newHistoryItem: HistoryItem = {
       id: `hist-${Date.now()}`,
-      type: "question",
-      content: userQuestion,
+      type: "user_query",
+      data: {
+        queryText: userQuestion,
+        isSuggestion: false,
+      },
       timestamp: new Date(),
     }
     setHistory(prevHistory => [...prevHistory, newHistoryItem]);
@@ -293,8 +720,10 @@ export default function WelcomePage() {
       // Ajoute la réponse à l'historique
       const assistantHistoryItem: HistoryItem = {
         id: `hist-ans-${Date.now()}`,
-        type: "answer",
-        content: data.answer, // Utilise data.answer
+        type: "assistant_reply",
+        data: {
+          replyText: data.answer,
+        },
         timestamp: new Date(),
       }
       setHistory(prevHistory => [...prevHistory, assistantHistoryItem]);
@@ -322,9 +751,11 @@ export default function WelcomePage() {
       // Ajouter à l'historique
       const newHistoryItem: HistoryItem = {
         id: `hist-${Date.now()}`,
-        type: "category",
-        content: `${typeof category.icon === 'string' ? category.icon : category.icon.alt} Catégorie ${category.title}`,
-        category: categoryId,
+        type: "category_selection",
+        data: {
+          categoryTitle: category.title,
+          categoryIcon: typeof category.icon === 'string' ? category.icon : category.icon.alt,
+        },
         timestamp: new Date(),
       }
       setHistory([newHistoryItem])
@@ -381,8 +812,12 @@ export default function WelcomePage() {
     // Ajouter la réponse à l'historique
     const newHistoryItem: HistoryItem = {
       id: `hist-${Date.now()}`,
-      type: "answer",
-      content: currentQuestion.historyLabel(buttonId),
+      type: "qualification_step",
+      data: {
+        questionText: currentQuestion.question,
+        answerText: currentQuestion.historyLabel(buttonId),
+        answerIcon: currentQuestion.historyIcon,
+      },
       timestamp: new Date(),
     }
 
@@ -442,9 +877,13 @@ export default function WelcomePage() {
 
     // Ajoute la question à l'historique
     const suggestionHistoryItem: HistoryItem = {
-      id: `hist-sugg-${Date.now()}`,
-      type: "question",
-      content: `${suggestion.icon ? suggestion.icon + " " : ""}${userQuestion}`,
+      id: `hist-${Date.now()}`,
+      type: "user_query",
+      data: {
+        queryText: userQuestion,
+        isSuggestion: true,
+        suggestionIcon: suggestion.icon,
+      },
       timestamp: new Date(),
     }
     setHistory(prevHistory => [...prevHistory, suggestionHistoryItem]);
@@ -504,8 +943,10 @@ export default function WelcomePage() {
       // Ajoute la réponse à l'historique
       const assistantHistoryItem: HistoryItem = {
         id: `hist-ans-${Date.now()}`,
-        type: "answer",
-        content: data.answer,
+        type: "assistant_reply",
+        data: {
+          replyText: data.answer,
+        },
         timestamp: new Date(),
       }
       setHistory(prevHistory => [...prevHistory, assistantHistoryItem]);
@@ -548,28 +989,29 @@ export default function WelcomePage() {
   if (currentStep !== "dashboard") {
     return (
       <div className="min-h-screen flex flex-col lg:flex-row">
-        {/* Left Section - White Background */}
-        <div className="lg:w-1/2 bg-[#faf9f6] flex items-center justify-center p-6 sm:p-12 order-2 lg:order-1">
-          <div className="w-full max-w-md space-y-6 sm:space-y-8 text-center">
-            <div className="flex flex-col items-center">
-              <div className="mb-4">
-                <Image
-                  src="/placeholder.svg?height=80&width=80"
-                  alt="Emoji souriant"
-                  width={80}
-                  height={80}
-                  className="rounded-full"
-                />
+        {/* Left Section - White Background - Conditionally render based on currentStep */}
+        {currentStep === "initial" && (
+          <div className="lg:w-1/2 bg-[#faf9f6] flex items-center justify-center p-6 sm:p-12 order-2 lg:order-1">
+            <div className="w-full max-w-md space-y-6 sm:space-y-8 text-center">
+              <div className="flex flex-col items-center">
+                <div className="mb-4">
+                  <Image
+                    src="/placeholder.svg?height=80&width=80"
+                    alt="Emoji souriant"
+                    width={80}
+                    height={80}
+                    className="rounded-full"
+                  />
+                </div>
+                <h1 className="text-3xl sm:text-4xl font-bold text-gray-800 mb-2 text-center">
+                  Bienvenue sur l&apos;assistant
+                </h1>
+                <p className="text-gray-600 text-base sm:text-lg text-center">
+                  Je suis un outil pensé pour vous aider à trouver les bonnes infos
+                </p>
               </div>
-              <h1 className="text-3xl sm:text-4xl font-bold text-gray-800 mb-2 text-center">
-                Bienvenue sur l&apos;assistant
-              </h1>
-              <p className="text-gray-600 text-base sm:text-lg text-center">
-                Je suis un outil pensé pour vous aider à trouver les bonnes infos
-              </p>
-            </div>
 
-            {currentStep !== "documents" && (
+              {/* Ces éléments s'affichent si currentStep est "initial" */}
               <div className="space-y-4 sm:space-y-6 text-left">
                 <h2 className="text-xl font-semibold text-gray-700">Comment ça marche ?</h2>
                 <ol className="space-y-3">
@@ -589,19 +1031,23 @@ export default function WelcomePage() {
                   </li>
                 </ol>
               </div>
-            )}
 
-            {currentStep !== "documents" && (
+              {/* Cet élément s'affiche si currentStep est "initial" */}
               <div className="flex items-center gap-2 text-gray-600 text-sm sm:text-base justify-center pt-2">
                 <Sparkles className="h-4 w-4 text-yellow-500" />
                 <span>C&apos;est rapide, gratuit et sans inscription</span>
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Right Section - Brown Background */}
-        <div className="lg:w-1/2 bg-white flex flex-col justify-center items-center p-6 sm:p-12 order-1 lg:order-2">
+        {/* Right Section - Brown Background - Adjust width based on currentStep */}
+        <div
+          className={`
+            ${currentStep === "initial" ? "lg:w-1/2" : "w-full"} 
+            bg-white flex flex-col justify-center items-center p-6 sm:p-12 order-1 lg:order-2
+          `}
+        >
           <div className="w-full max-w-md space-y-4 sm:space-y-6">
             {currentStep === "initial" && (
               // Initial screen with role selection
@@ -618,13 +1064,12 @@ export default function WelcomePage() {
                       className="w-full bg-[#000000] text-white rounded-lg p-3 sm:p-4 flex items-center justify-center gap-2 hover:bg-opacity-90 transition-all text-base sm:text-lg"
                       onClick={() => {
                         setUserRole("accompagnant");
-                        setCurrentStep("intro");
+                        setCurrentStep("login");
                       }}
                     >
                       <span className="text-yellow-400">👤</span>
                       <div className="text-left">
                         <div className="font-medium">Accompagnant.e</div>
-                        <div className="text-xs sm:text-sm text-gray-300">(Travailleur social, bénévole)</div>
                       </div>
                     </button>
 
@@ -632,13 +1077,12 @@ export default function WelcomePage() {
                       className="w-full bg-[#000000] text-white rounded-lg p-3 sm:p-4 flex items-center justify-center gap-2 hover:bg-opacity-90 transition-all text-base sm:text-lg"
                       onClick={() => {
                         setUserRole("accompagne");
-                        setCurrentStep("intro");
+                        setCurrentStep("login");
                       }}
                     >
                       <span className="text-yellow-400">👤</span>
                       <div className="text-left">
                         <div className="font-medium">Accompagné.e</div>
-                        <div className="text-xs sm:text-sm text-gray-300">(Je cherche un logement)</div>
                       </div>
                     </button>
                   </div>
@@ -649,18 +1093,145 @@ export default function WelcomePage() {
               </>
             )}
 
+            {currentStep === "login" && (
+              // Nouvelle étape de connexion
+              <div className="space-y-6 text-center">
+                <div>
+                  <h2 className="text-2xl font-semibold text-[#000000] mb-2">Connexion</h2>
+                  <p className="text-gray-500 text-sm">Veuillez vous connecter pour continuer.</p>
+                </div>
+                <form onSubmit={handleLoginSubmit} className="space-y-4">
+                  <div>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Adresse e-mail (optionnel)"
+                      className="border border-[#c8c6c6] rounded-md p-3 w-full max-w-xs text-center"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Mot de passe (optionnel)"
+                      className="border border-[#c8c6c6] rounded-md p-3 w-full max-w-xs text-center"
+                    />
+                  </div>
+                  {loginError && <p className="text-red-500 text-sm">{loginError}</p>}
+                  <button
+                    type="submit"
+                    className="rounded-full px-6 py-2.5 bg-gray-800 text-white text-sm font-medium hover:bg-gray-700 transition-all flex items-center justify-center gap-1.5 w-full max-w-xs mx-auto"
+                  >
+                    Se connecter
+                  </button>
+                  <p className="text-sm text-center mt-4">
+                    Pas encore de compte ?{" "}
+                    <button
+                      type="button"
+                      onClick={() => setCurrentStep("register")}
+                      className="font-medium text-blue-600 hover:underline"
+                    >
+                      S&apos;inscrire
+                    </button>
+                  </p>
+                  <button // Bouton Précédent pour l'écran de connexion
+                    type="button"
+                    onClick={() => setCurrentStep("initial")}
+                    className="text-sm text-gray-600 hover:underline mt-2 w-full max-w-xs mx-auto"
+                  >
+                    Précédent
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {currentStep === "register" && (
+              // Nouvelle étape d'inscription
+              <div className="space-y-6 text-center">
+                <div>
+                  <h2 className="text-2xl font-semibold text-[#000000] mb-2">Inscription</h2>
+                  <p className="text-gray-500 text-sm">Créez un compte pour continuer.</p>
+                </div>
+                <form onSubmit={handleRegisterSubmit} className="space-y-4">
+                  <div>
+                    <input
+                      type="email"
+                      value={registerEmail}
+                      onChange={(e) => setRegisterEmail(e.target.value)}
+                      placeholder="Adresse e-mail"
+                      className="border border-[#c8c6c6] rounded-md p-3 w-full max-w-xs text-center"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="password"
+                      value={registerPassword}
+                      onChange={(e) => setRegisterPassword(e.target.value)}
+                      placeholder="Mot de passe"
+                      className="border border-[#c8c6c6] rounded-md p-3 w-full max-w-xs text-center"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirmer le mot de passe"
+                      className="border border-[#c8c6c6] rounded-md p-3 w-full max-w-xs text-center"
+                      required
+                    />
+                  </div>
+                  {registerError && <p className="text-red-500 text-sm">{registerError}</p>}
+                  <button
+                    type="submit"
+                    className="rounded-full px-6 py-2.5 bg-gray-800 text-white text-sm font-medium hover:bg-gray-700 transition-all flex items-center justify-center gap-1.5 w-full max-w-xs mx-auto"
+                  >
+                    S&apos;inscrire
+                  </button>
+                  <p className="text-sm text-center mt-4">
+                    Déjà un compte ?{" "}
+                    <button
+                      type="button"
+                      onClick={() => setCurrentStep("login")}
+                      className="font-medium text-blue-600 hover:underline"
+                    >
+                      Se connecter
+                    </button>
+                  </p>
+                  <button // Bouton Précédent pour l'écran d'inscription
+                    type="button"
+                    onClick={() => setCurrentStep("login")}
+                    className="text-sm text-gray-600 hover:underline mt-2 w-full max-w-xs mx-auto"
+                  >
+                    Précédent (vers connexion)
+                  </button>
+                </form>
+              </div>
+            )}
+
             {currentStep === "intro" && (
               // Second screen with introduction message
-              <div className="flex flex-col items-center lg:items-start justify-center h-full">
+              <div className="flex flex-col items-center justify-center h-full">
                 <div className="border border-[#c8c6c6] rounded-lg p-6 bg-white mb-6 w-full">
-                  <p className="text-[#414143]">
+                  <p className="text-[#414143] text-center">
                     {userRole === "accompagnant" 
                       ? "Maintenant je vais vous poser des questions sur la personne que vous accompagnez"
                       : "Maintenant je vais vous poser des questions pour bien comprendre votre situation"}
                   </p>
                 </div>
 
-                <div className="flex justify-center lg:justify-end w-full">
+                <div className="flex justify-center w-full mt-4 gap-3"> 
+                  <button 
+                    type="button"
+                    onClick={() => setCurrentStep("login")}
+                    className="rounded-full px-4 py-2 bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all"
+                  >
+                    Précédent
+                  </button>
                   <button
                     className="rounded-full px-4 py-2 bg-[#f5f5f5] text-[#414143] flex items-center gap-2 hover:bg-gray-200 transition-all"
                     onClick={() => setCurrentStep("documents")}
@@ -675,7 +1246,7 @@ export default function WelcomePage() {
             {currentStep === "documents" && (
               // Third screen with document selection
               <div className="space-y-5">
-                <div> 
+                <div className="text-center"> 
                   <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 mb-1.5">
                     <span className="mr-1.5">
                       {userRole === "accompagnant" ? "🪪" : "📄"}
@@ -691,9 +1262,9 @@ export default function WelcomePage() {
                   </p>
                 </div>
 
-                <div className="space-y-2.5">
+                <div className="space-y-2.5 flex flex-col items-center">
                   {documents.map((doc) => (
-                    <div key={doc.id} className="flex items-start gap-2">
+                    <div key={doc.id} className="flex items-start gap-2 w-full max-w-xs">
                       <input
                         type="checkbox"
                         id={doc.id}
@@ -708,7 +1279,14 @@ export default function WelcomePage() {
                   ))}
                 </div>
 
-                <div className="flex justify-center pt-3"> 
+                <div className="flex justify-center pt-3 mt-4 gap-3"> 
+                  <button 
+                    type="button"
+                    onClick={() => setCurrentStep("intro")}
+                    className="rounded-full px-4 py-2 bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all text-xs font-medium"
+                  >
+                    Précédent
+                  </button>
                   <button
                     className="rounded-full px-4 py-2 bg-gray-800 text-white text-xs font-medium hover:bg-gray-700 transition-all flex items-center gap-1.5"
                     onClick={() => setCurrentStep("birthdate")}
@@ -723,7 +1301,7 @@ export default function WelcomePage() {
             {currentStep === "birthdate" && (
               // Fourth screen with birthdate input
               <div className="space-y-6">
-                <div className="text-center lg:text-left">
+                <div className="text-center">
                   <h2 className="text-2xl font-semibold text-[#000000] mb-4">
                     <span className="mr-2">
                       {userRole === "accompagnant" ? "🗓️" : "📅"}
@@ -735,7 +1313,7 @@ export default function WelcomePage() {
                   {/* Le placeholder et la gestion d'erreur peuvent rester génériques ou être adaptés si besoin */}
                 </div>
 
-                <div className="flex flex-col items-center lg:items-start">
+                <div className="flex flex-col items-center">
                   <input
                     type="text"
                     value={birthdate}
@@ -749,7 +1327,14 @@ export default function WelcomePage() {
                   />
                   {birthdateError && <p className="text-red-500 text-sm mt-1">{birthdateError}</p>}
 
-                  <div className="mt-6">
+                  <div className="mt-6 flex justify-center w-full gap-3"> 
+                    <button 
+                      type="button"
+                      onClick={() => setCurrentStep("documents")}
+                      className="rounded-full px-4 py-2 bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all"
+                    >
+                      Précédent
+                    </button>
                     <button
                       className="rounded-full px-4 py-2 bg-[#f5f5f5] text-[#414143] flex items-center gap-2 hover:bg-gray-200 transition-all"
                       onClick={handleBirthdateSubmit}
@@ -807,64 +1392,57 @@ export default function WelcomePage() {
           </button>
         </div>
         <div className="p-6 flex-1 overflow-y-auto">
-          {/* Titre "Historique" - sans Chevron ni onClick pour expand/collapse */}
-          <h2 className="text-xl font-semibold text-gray-900 mb-1">Historique</h2>
-          <p className="text-sm text-gray-500 mb-6">Résumé de votre parcours</p>
+          {/* Titre pour la liste des conversations */}
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">Mes Conversations</h2>
+            <button
+              onClick={() => createNewConversation(allConversations)}
+              className="text-sm bg-blue-500 hover:bg-blue-600 text-white font-medium py-1 px-2.5 rounded-lg flex items-center gap-1.5"
+              title="Démarrer une nouvelle conversation"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              Nouveau
+            </button>
+          </div>
           
-          {/* Contenu de l'historique - plus de classes de transition max-height/opacity ici */}
-          <div className="border border-gray-200 rounded-lg p-3 min-h-[100px]">
-            {history.length > 0 ? (
-              <ul className="w-full space-y-1.5">
-                {history.map((item) => {
-                  let IconComponent = RefreshCw;
-                  let iconColor = "text-gray-500";
-                  switch (item.type) {
-                    case "category":
-                      IconComponent = FolderKanban;
-                      iconColor = "text-purple-500";
-                      break;
-                    case "answer":
-                      if (healthQuestions.some(q => q.historyLabel && item.content.startsWith(q.historyLabel("").split(" ")[0]))) {
-                         IconComponent = ClipboardCheck;
-                         iconColor = "text-green-500";
-                      } else {
-                         IconComponent = MessageSquareText;
-                         iconColor = "text-blue-500";
-                      }
-                      break;
-                    case "question":
-                      IconComponent = HelpCircle;
-                      iconColor = "text-orange-500";
-                      break;
-                    default:
-                      break;
-                  }
-                  return (
-                    <li key={item.id} className="text-sm flex items-start gap-2 text-gray-700 p-1 rounded hover:bg-gray-100">
-                      <IconComponent className={`h-4 w-4 ${iconColor} mt-0.5 flex-shrink-0`} />
-                      <span className="flex-1 break-words">{item.content}</span>
-                    </li>
-                  );
-                })}
+          {/* Liste des conversations */}
+          <div className="border border-gray-200 rounded-lg min-h-[100px] max-h-[calc(100vh-280px)] overflow-y-auto">
+            {allConversations.length > 0 ? (
+              <ul className="w-full divide-y divide-gray-200">
+                {[...allConversations].sort((a, b) => b.lastActivity - a.lastActivity).map((conversation) => (
+                  <li key={conversation.id} className="flex items-center justify-between hover:bg-gray-50">
+                    <button
+                      onClick={() => loadConversation(conversation.id)}
+                      className={`flex-grow text-left p-2.5 text-xs transition-colors ${conversation.id === activeConversationId ? "bg-gray-100 font-medium" : "hover:bg-gray-100"}`}
+                    >
+                      <span className="block truncate">{conversation.name}</span>
+                      <span className="block text-gray-400 text-[10px] mt-0.5">
+                        Dernière activité: {formatTimestamp(new Date(conversation.lastActivity))}
+                      </span>
+                    </button>
+                    <button
+                      onClick={(e) => { 
+                        e.stopPropagation(); // Empêcher le déclenchement de loadConversation
+                        handleDeleteConversation(conversation.id); 
+                      }}
+                      className="p-2.5 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
+                      title="Supprimer la conversation"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                    </button>
+                  </li>
+                ))}
               </ul>
             ) : (
-              <div className="h-full flex flex-col items-center justify-center text-gray-400 py-4">
-                <RefreshCw className="h-6 w-6 mb-1" />
-                <span>L&apos;historique est vide</span>
+              <div className="h-full flex flex-col items-center justify-center text-gray-400 py-4 px-2 text-center">
+                <MessageSquareText className="h-6 w-6 mb-2" />
+                <span>Aucune conversation.</span>
+                <span className="text-xs">Cliquez sur &quot;Nouveau&quot; pour commencer.</span>
               </div>
             )}
           </div>
         </div>
-        {history.some((item) => item.category === "sante") && (
-          <div className="p-4 border-t border-gray-200 flex justify-center gap-2">
-            <button
-              className="flex items-center justify-center px-3 h-8 bg-gray-100 rounded-md text-xs text-gray-600 hover:bg-gray-200"
-              onClick={() => window.open("https://www.ameli.fr", "_blank")}
-            >
-              ameli.fr
-            </button>
-          </div>
-        )}
+        
         <div className="p-4 border-t border-gray-200 flex items-center text-xs text-gray-500">
           <Lock className="h-4 w-4 mr-2 text-gray-400" />
           <span>Vos informations ne sont pas sauvegardées</span>
@@ -921,10 +1499,10 @@ export default function WelcomePage() {
                   <div key={message.id} className="space-y-2">
                     <div className={`flex ${message.sender === "assistant" ? "justify-start" : "justify-end"}`}>
                       <div
-                        className={`p-3 md:p-4 rounded-xl shadow-sm max-w-[95%] md:max-w-[85%] ${
+                        className={`p-3 md:p-4 rounded-xl shadow-sm ${ 
                           message.sender === "assistant"
-                            ? "bg-white text-gray-800 rounded-bl-none"
-                            : "bg-blue-600 text-white rounded-br-none"
+                            ? "bg-white text-gray-800 rounded-bl-none max-w-full sm:max-w-2xl md:max-w-3xl" // Largeur ajustée pour l'assistant
+                            : "bg-blue-600 text-white rounded-br-none max-w-[85%] sm:max-w-xl md:max-w-2xl" // Largeur ajustée pour l'utilisateur
                         }`}
                       >
                         {message.sender === "assistant" && (
@@ -1043,6 +1621,35 @@ export default function WelcomePage() {
           </form>
         </div>
       </div>
+
+      {/* Modale de confirmation de suppression */}
+      {showDeleteConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-lg shadow-xl p-6 m-4 max-w-sm w-full">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Confirmer la suppression</h3>
+            <p className="text-sm text-gray-600 mb-6">
+              Êtes-vous sûr de vouloir supprimer cette conversation ? Cette action est irréversible.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirmModal(false);
+                  setConversationToDeleteId(null);
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={confirmActualDelete}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
