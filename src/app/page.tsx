@@ -198,60 +198,19 @@ export default function WelcomePage() {
 
   // Effet pour charger l'état depuis localStorage au montage initial
   useEffect(() => {
-    const savedStorage = localStorage.getItem(APP_STORAGE_KEY)
-    if (savedStorage) {
-      try {
-        const parsedStorage: AppStorage = JSON.parse(savedStorage)
-        if (parsedStorage.conversations) {
-          const loadedConversations = parsedStorage.conversations.map(conv => ({
-            ...conv,
-            sessionData: {
-              ...conv.sessionData,
-              messages: conv.sessionData.messages.map(msg => ({ ...msg, timestamp: new Date(msg.timestamp) })),
-              history: conv.sessionData.history.map(item => ({ ...item, timestamp: new Date(item.timestamp) })),
-            }
-          }))
-          setAllConversations(loadedConversations)
-
-          let convIdToLoad = parsedStorage.activeConversationId
-          if (!convIdToLoad && loadedConversations.length > 0) {
-            // Charger la plus récente si aucun ID actif n'est sauvegardé
-            convIdToLoad = loadedConversations.sort((a, b) => b.lastActivity - a.lastActivity)[0].id
-          }
-
-          if (convIdToLoad) {
-            const activeConv = loadedConversations.find(c => c.id === convIdToLoad)
-            if (activeConv) {
-              // Charger les données de la session active
-              const { sessionData } = activeConv
-              setMessages(sessionData.messages)
-              setHistory(sessionData.history)
-              setCurrentStep(sessionData.currentStep)
-              setUserRole(sessionData.userRole)
-              setSelectedCategory(sessionData.selectedCategory)
-              setUserAnswers(sessionData.userAnswers)
-              setCurrentQuestionIndex(sessionData.currentQuestionIndex)
-              setEmail(sessionData.email)
-              setBirthdate(sessionData.birthdate)
-              setActiveConversationId(activeConv.id)
-            } else { // Si l'ID actif n'est pas trouvé, démarrer une nouvelle conversation
-              createNewConversation(loadedConversations, true)
-            }
-          } else { // Aucune conversation, en créer une nouvelle
-            createNewConversation([], true)
-          }
-        } else { // Pas de conversations dans le storage, en créer une nouvelle
-           createNewConversation([], true)
-        }
-      } catch (error) {
-        console.error("Erreur lors de la restauration des sessions depuis localStorage:", error)
-        localStorage.removeItem(APP_STORAGE_KEY) // Supprimer les données corrompues
-        createNewConversation([], true) // Démarrer avec une nouvelle conversation propre
-      }
-    } else { // Pas de storage, en créer une nouvelle
-      createNewConversation([], true)
-    }
-  }, []) // Exécuter une seule fois au montage
+    // Toujours démarrer sur la page d'accueil, ignorer le localStorage pour l'étape initiale
+    setCurrentStep("initial");
+    setUserRole(null);
+    setSelectedCategory(null);
+    setMessages([]);
+    setHistory([]);
+    setUserAnswers({});
+    setCurrentQuestionIndex(0);
+    setEmail("");
+    setBirthdate("");
+    setActiveConversationId(null);
+    setAllConversations([]);
+  }, []);
 
   // Effet pour sauvegarder l'état dans localStorage lors de changements
   useEffect(() => {
