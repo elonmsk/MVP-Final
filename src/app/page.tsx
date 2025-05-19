@@ -8,7 +8,7 @@ import { useState, useRef, useEffect } from "react"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-type Step = "initial" | "intro" | "documents" | "birthdate" | "dashboard" | "login" | "register"
+type Step = "initial" | "intro" | "documents" | "birthdate" | "dashboard" | "login" | "inscription" | "inscription-done"
 type UserRole = "accompagnant" | "accompagne" | null
 
 // Nouveaux types pour l'historique
@@ -57,10 +57,10 @@ interface AssistantReplyHistoryItem extends BaseHistoryItem {
   };
 }
 
-export type HistoryItem = 
-  | CategorySelectionHistoryItem 
-  | QualificationStepHistoryItem 
-  | UserQueryHistoryItem 
+export type HistoryItem =
+  | CategorySelectionHistoryItem
+  | QualificationStepHistoryItem
+  | UserQueryHistoryItem
   | AssistantReplyHistoryItem;
 
 interface Document {
@@ -109,7 +109,7 @@ interface Question {
 // Nouvelle interface pour une conversation individuelle
 interface ConversationSessionData {
   messages: Message[];
-  history: HistoryItem[]; 
+  history: HistoryItem[];
   currentStep: Step;
   userRole: UserRole;
   selectedCategory: string | null;
@@ -117,7 +117,7 @@ interface ConversationSessionData {
   currentQuestionIndex: number;
   email: string; // Email de la session de connexion (si pertinent pour cette conv)
   birthdate: string; // Date de naissance de la session (si pertinent pour cette conv)
-  // Les erreurs (loginError, registerError, etc.) sont transitoires et ne sont pas stockées par conversation
+  // Les erreurs (, , etc.) sont transitoires et ne sont pas stockées par conversation
 }
 
 interface Conversation {
@@ -156,12 +156,17 @@ export default function WelcomePage() {
   const [currentStep, setCurrentStep] = useState<Step>("initial")
   const [userRole, setUserRole] = useState<UserRole>(null)
   const [email, setEmail] = useState<string>("")
-  const [password, setPassword] = useState<string>("")
-  const [loginError, setLoginError] = useState<string>("")
-  const [registerEmail, setRegisterEmail] = useState<string>("")
-  const [registerPassword, setRegisterPassword] = useState<string>("")
-  const [confirmPassword, setConfirmPassword] = useState<string>("")
-  const [registerError, setRegisterError] = useState<string>("")
+  const [loginPassword, setLoginPassword] = useState<string>("")
+  const [inscriptionPassword, setInscriptionPassword] = useState<string>("")
+  const [identifiant, setIdentifiant] = useState<string>("")
+  const [uid, setUid] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+  const [isSuccess, setIsSuccess] = useState(false)
+  const [showLoginPassword, setShowLoginPassword] = useState(false)
+  const [showInscriptionPassword, setShowInscriptionPassword] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [loading, setLoading] = useState(false)
+
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([])
   const [birthdate, setBirthdate] = useState<string>("")
   const [birthdateError, setBirthdateError] = useState<string>("")
@@ -213,7 +218,7 @@ export default function WelcomePage() {
             // Charger la plus récente si aucun ID actif n'est sauvegardé
             convIdToLoad = loadedConversations.sort((a, b) => b.lastActivity - a.lastActivity)[0].id
           }
-          
+
           if (convIdToLoad) {
             const activeConv = loadedConversations.find(c => c.id === convIdToLoad)
             if (activeConv) {
@@ -230,13 +235,13 @@ export default function WelcomePage() {
               setBirthdate(sessionData.birthdate)
               setActiveConversationId(activeConv.id)
             } else { // Si l'ID actif n'est pas trouvé, démarrer une nouvelle conversation
-              createNewConversation(loadedConversations, true) 
+              createNewConversation(loadedConversations, true)
             }
           } else { // Aucune conversation, en créer une nouvelle
-            createNewConversation([], true) 
+            createNewConversation([], true)
           }
         } else { // Pas de conversations dans le storage, en créer une nouvelle
-           createNewConversation([], true) 
+           createNewConversation([], true)
         }
       } catch (error) {
         console.error("Erreur lors de la restauration des sessions depuis localStorage:", error)
@@ -244,7 +249,7 @@ export default function WelcomePage() {
         createNewConversation([], true) // Démarrer avec une nouvelle conversation propre
       }
     } else { // Pas de storage, en créer une nouvelle
-      createNewConversation([], true) 
+      createNewConversation([], true)
     }
   }, []) // Exécuter une seule fois au montage
 
@@ -267,17 +272,17 @@ export default function WelcomePage() {
             birthdate,
         }
 
-        const updatedConversations = allConversations.map(conv => 
-            conv.id === activeConversationId 
-            ? { 
-                ...conv, 
-                sessionData: currentConversationData, 
-                lastActivity: Date.now(), 
-                name: conv.name === "Nouvelle conversation" && messages.length > 0 ? generateDefaultConversationName(messages) : conv.name 
-              } 
+        const updatedConversations = allConversations.map(conv =>
+            conv.id === activeConversationId
+            ? {
+                ...conv,
+                sessionData: currentConversationData,
+                lastActivity: Date.now(),
+                name: conv.name === "Nouvelle conversation" && messages.length > 0 ? generateDefaultConversationName(messages) : conv.name
+              }
             : conv
         )
-        
+
         // S'assurer que la conversation active est bien dans la liste (au cas où elle vient d'être créée)
         if (!updatedConversations.some(c => c.id === activeConversationId)) {
             // Ce cas devrait être géré par createNewConversation, mais sécurité
@@ -299,7 +304,7 @@ export default function WelcomePage() {
         localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(newStorage))
     }
   }, [
-    messages, history, currentStep, userRole, selectedCategory, userAnswers, 
+    messages, history, currentStep, userRole, selectedCategory, userAnswers,
     currentQuestionIndex, email, birthdate, activeConversationId, allConversations // Ajout de allConversations
   ])
 
@@ -324,14 +329,14 @@ export default function WelcomePage() {
     };
 
     const updatedListOfConversations = [...currentListOfConversations, newConversation];
-    if (!isInitialLoad) { 
+    if (!isInitialLoad) {
         setAllConversations(updatedListOfConversations);
     } else {
         // Pour le chargement initial, si on crée une nouvelle conv, il faut aussi mettre à jour allConversations
         // Ceci est important si le localStorage était vide ou corrompu.
-        setAllConversations(updatedListOfConversations); 
+        setAllConversations(updatedListOfConversations);
     }
-    
+
     // Charger les états de la nouvelle conversation
     setMessages(newConversation.sessionData.messages);
     setHistory(newConversation.sessionData.history);
@@ -344,12 +349,6 @@ export default function WelcomePage() {
     setBirthdate(newConversation.sessionData.birthdate);
     // Réinitialiser les champs de formulaire temporaires
     setQuestion("");
-    setPassword("");
-    setLoginError("");
-    setRegisterEmail("");
-    setRegisterPassword("");
-    setConfirmPassword("");
-    setRegisterError("");
     setSelectedDocuments([]);
     setBirthdateError("");
 
@@ -367,7 +366,7 @@ export default function WelcomePage() {
     // ou si la liste passée à createNewConversation n'était pas la plus à jour), on la crée et on la récupère.
     // Cependant, avec la logique actuelle, createNewConversation met à jour setAllConversations (sauf si isInitialLoad est true et qu'on est pas dans le useEffect de load)
     // Pour simplifier, on part du principe que createNewConversation a bien mis à jour allConversations OU que l'ID est valide pour une nouvelle création.
-    
+
     // Pour handleGoHome, on veut une nouvelle conversation configurée pour commencer à l'étape "initial"
     const goHomeSessionData: ConversationSessionData = {
         messages: [], history: [], currentStep: "initial", userRole: null, selectedCategory: null,
@@ -375,8 +374,8 @@ export default function WelcomePage() {
     };
 
     if (convToUpdate) { // Si la conversation a été trouvée (donc ajoutée par createNewConversation)
-        const updatedConv = { 
-            ...convToUpdate, 
+        const updatedConv = {
+            ...convToUpdate,
             sessionData: goHomeSessionData,
             name: "Nouvelle conversation" // Réinitialiser le nom
         };
@@ -413,59 +412,10 @@ export default function WelcomePage() {
         setBirthdate(goHomeSessionData.birthdate);
         setActiveConversationId(forcedNewId);
     }
-    setSidebarOpen(false); 
+    setSidebarOpen(false);
   };
 
-  const handleLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError(""); // Réinitialiser les erreurs précédentes
 
-    // La vérification des champs obligatoires est supprimée ici
-    // if (!email || !password) {
-    //   setLoginError("Veuillez remplir tous les champs.");
-    //   return;
-    // }
-
-    // TODO: Implémenter une véritable logique de connexion ici
-    // Si les champs sont remplis, on peut toujours tenter de les utiliser
-    if (email || password) {
-      console.log("Tentative de connexion (optionnelle) avec:", { email, password });
-      // Ici, vous pourriez ajouter une logique pour tenter une vraie connexion si des identifiants sont fournis,
-      // mais sans bloquer l'utilisateur s'ils ne le sont pas ou si la connexion échoue.
-      // Pour l'instant, on logue simplement et on continue.
-    }
-
-    // On passe toujours à l'étape suivante
-    setCurrentStep("intro");
-  };
-
-  const handleRegisterSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setRegisterError(""); // Réinitialiser les erreurs précédentes
-
-    if (!registerEmail || !registerPassword || !confirmPassword) {
-      setRegisterError("Veuillez remplir tous les champs.");
-      return;
-    }
-
-    if (registerPassword !== confirmPassword) {
-      setRegisterError("Les mots de passe ne correspondent pas.");
-      return;
-    }
-
-    // TODO: Implémenter une véritable logique d'inscription ici (ex: appel API)
-    console.log("Tentative d'inscription avec:", { email: registerEmail, password: registerPassword });
-
-    // Simulation d'un appel API pour l'inscription
-    // setIsLoading(true);
-    // await new Promise(resolve => setTimeout(resolve, 1000));
-    // setIsLoading(false);
-
-    // Pour cet exemple, on considère l'inscription réussie
-    // Dans un cas réel, vous pourriez vouloir connecter l'utilisateur automatiquement après l'inscription
-    // ou le rediriger vers la page de connexion avec un message de succès.
-    setCurrentStep("intro"); // Ou "login" pour qu'il se connecte après inscription
-  };
 
   // Questions pour la catégorie Santé
   const healthQuestions: Question[] = [
@@ -567,6 +517,71 @@ export default function WelcomePage() {
     }
   }
 
+  const handleInscription = async () => {
+    if (!inscriptionPassword) return
+
+    setLoading(true)
+    const res = await fetch('/api/inscription', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: inscriptionPassword }),
+    })
+    const data = await res.json()
+    setLoading(false)
+
+    if (data.error) {
+      setMessage(`❌ ${data.error}`)
+    } else {
+      setUid(data.uid)
+      setCurrentStep("inscription-done")
+    }
+  }
+
+  const handleLogin = async () => {
+    setMessage(null)
+
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifiant, password: loginPassword }),
+    })
+
+    const data = await res.json()
+
+    if (!res.ok) {
+      setIsSuccess(false)
+      setMessage(`❌ ${data.error || 'Identifiant ou mot de passe incorrect'}`)
+    } else {
+      setIsSuccess(true)
+      setMessage('✅ Connexion réussie !')
+      setUserRole("accompagne")
+      setCurrentStep("intro")
+    }
+  }
+
+  const copyToClipboard = () => {
+    if (uid) {
+      const textArea = document.createElement('textarea')
+      textArea.value = uid
+      textArea.style.position = 'fixed'
+      textArea.style.left = '-999999px'
+      textArea.style.top = '-999999px'
+      document.body.appendChild(textArea)
+      textArea.focus()
+      textArea.select()
+      
+      try {
+        document.execCommand('copy')
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      } catch (err) {
+        console.error('Erreur lors de la copie:', err)
+      }
+      
+      document.body.removeChild(textArea)
+    }
+  }
+
   const handleQuestionSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const userQuestion = question.trim();
@@ -626,10 +641,10 @@ export default function WelcomePage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           question: userQuestion,
           qualificationContext: qualificationContext || undefined // Envoie le contexte formaté
-        }), 
+        }),
       });
 
       if (!response.ok) {
@@ -851,10 +866,10 @@ export default function WelcomePage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           question: userQuestion, // Utilise le label de la suggestion comme question
-          qualificationContext: qualificationContext || undefined 
-        }), 
+          qualificationContext: qualificationContext || undefined
+        }),
       });
 
       if (!response.ok) {
@@ -915,7 +930,7 @@ export default function WelcomePage() {
     }
   }, [messages])
 
-  // --- Dashboard principal --- 
+  // --- Dashboard principal ---
   // const selectedCategoryData = categories.find(c => c.id === selectedCategory); // Supprimé car non utilisé
 
   // Affichage des écrans d'onboarding
@@ -977,7 +992,7 @@ export default function WelcomePage() {
         {/* Right Section - Brown Background - Adjust width based on currentStep */}
         <div
           className={`
-            ${currentStep === "initial" ? "lg:w-1/2" : "w-full"} 
+            ${currentStep === "initial" ? "lg:w-1/2" : "w-full"}
             bg-white flex flex-col justify-center items-center p-6 sm:p-12 order-2 lg:order-2
           `}
         >
@@ -1027,122 +1042,167 @@ export default function WelcomePage() {
             )}
 
             {currentStep === "login" && (
-              // Nouvelle étape de connexion
-              <div className="space-y-6 text-center">
-                <div>
-                  <h2 className="text-2xl font-semibold text-[#000000] mb-2">Connexion</h2>
-                  <p className="text-gray-500 text-sm">Veuillez vous connecter pour continuer.</p>
-                </div>
-                <form onSubmit={handleLoginSubmit} className="space-y-4">
-                  <div>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="Adresse e-mail (optionnel)"
-                      className="border border-[#c8c6c6] rounded-md p-3 w-full max-w-xs text-center"
-                    />
+              <div className="flex flex-col items-center justify-center min-h-[80vh] w-full">
+                <div className="space-y-6 w-full max-w-md">
+                  <div className="text-center">
+                    <h2 className="text-2xl font-semibold text-[#000000] mb-4">Connexion</h2>
                   </div>
-                  <div>
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Mot de passe (optionnel)"
-                      className="border border-[#c8c6c6] rounded-md p-3 w-full max-w-xs text-center"
-                    />
-                  </div>
-                  {loginError && <p className="text-red-500 text-sm">{loginError}</p>}
-                  <button
-                    type="submit"
-                    className="rounded-full px-6 py-2.5 bg-gray-800 text-white text-sm font-medium hover:bg-gray-700 transition-all flex items-center justify-center gap-1.5 w-full max-w-xs mx-auto"
-                  >
-                    Se connecter
-                  </button>
-                  <p className="text-sm text-center mt-4">
-                    Pas encore de compte ?{" "}
+
+                  <div className="space-y-4">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Identifiant (6 chiffres)"
+                        value={identifiant}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^0-9]/g, '')
+                          setIdentifiant(value)
+                        }}
+                        className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type={showLoginPassword ? 'text' : 'password'}
+                        placeholder="Mot de passe"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent pr-12"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowLoginPassword(!showLoginPassword)}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-indigo-600"
+                        tabIndex={-1}
+                      >
+                        {showLoginPassword ? "👁️" : "👁️‍🗨️"}
+                      </button>
+                    </div>
+
                     <button
-                      type="button"
-                      onClick={() => setCurrentStep("register")}
-                      className="font-medium text-blue-600 hover:underline"
+                      onClick={handleLogin}
+                      className="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition-colors duration-200 flex items-center justify-center gap-2"
                     >
-                      S&apos;inscrire
+                      <span>Se connecter</span>
                     </button>
-                  </p>
-                  <button // Bouton Précédent pour l'écran de connexion
-                    type="button"
-                    onClick={() => setCurrentStep("initial")}
-                    className="text-sm text-gray-600 hover:underline mt-2 w-full max-w-xs mx-auto"
-                  >
-                    Précédent
-                  </button>
-                </form>
+
+                    <button
+                      onClick={() => {
+                        setLoginPassword("")
+                        setShowLoginPassword(false)
+                        setCurrentStep("inscription")
+                      }}
+                      className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-50 transition-colors duration-200 flex items-center justify-center gap-2"
+                    >
+                      <span>Créer un compte</span>
+                    </button>
+                  </div>
+
+                  {message && (
+                    <div className={`mt-3 flex items-center justify-center gap-2 ${
+                      isSuccess ? 'text-green-600' : 'text-red-500'
+                    }`}>
+                      <p className="text-sm">{message}</p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
-            {currentStep === "register" && (
-              // Nouvelle étape d'inscription
-              <div className="space-y-6 text-center">
-                <div>
-                  <h2 className="text-2xl font-semibold text-[#000000] mb-2">Inscription</h2>
-                  <p className="text-gray-500 text-sm">Créez un compte pour continuer.</p>
-                </div>
-                <form onSubmit={handleRegisterSubmit} className="space-y-4">
-                  <div>
-                    <input
-                      type="email"
-                      value={registerEmail}
-                      onChange={(e) => setRegisterEmail(e.target.value)}
-                      placeholder="Adresse e-mail"
-                      className="border border-[#c8c6c6] rounded-md p-3 w-full max-w-xs text-center"
-                      required
-                    />
+            {currentStep === "inscription" && (
+              <div className="flex flex-col items-center justify-center min-h-[80vh] w-full">
+                <div className="space-y-6 w-full max-w-md">
+                  <div className="text-center">
+                    <h2 className="text-2xl font-semibold text-[#000000] mb-4">Inscription</h2>
                   </div>
-                  <div>
-                    <input
-                      type="password"
-                      value={registerPassword}
-                      onChange={(e) => setRegisterPassword(e.target.value)}
-                      placeholder="Mot de passe"
-                      className="border border-[#c8c6c6] rounded-md p-3 w-full max-w-xs text-center"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <input
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Confirmer le mot de passe"
-                      className="border border-[#c8c6c6] rounded-md p-3 w-full max-w-xs text-center"
-                      required
-                    />
-                  </div>
-                  {registerError && <p className="text-red-500 text-sm">{registerError}</p>}
-                  <button
-                    type="submit"
-                    className="rounded-full px-6 py-2.5 bg-gray-800 text-white text-sm font-medium hover:bg-gray-700 transition-all flex items-center justify-center gap-1.5 w-full max-w-xs mx-auto"
-                  >
-                    S&apos;inscrire
-                  </button>
-                  <p className="text-sm text-center mt-4">
-                    Déjà un compte ?{" "}
+
+                  <div className="space-y-4">
+                    <div className="relative">
+                      <input
+                        type={showInscriptionPassword ? 'text' : 'password'}
+                        placeholder="Choisissez un mot de passe"
+                        value={inscriptionPassword}
+                        onChange={(e) => setInscriptionPassword(e.target.value)}
+                        className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent pr-12"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowInscriptionPassword(!showInscriptionPassword)}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-indigo-600"
+                        tabIndex={-1}
+                      >
+                        {showInscriptionPassword ? "👁️" : "👁️‍🗨️"}
+                      </button>
+                    </div>
+
                     <button
-                      type="button"
-                      onClick={() => setCurrentStep("login")}
-                      className="font-medium text-blue-600 hover:underline"
+                      onClick={handleInscription}
+                      className="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition-colors duration-200 flex items-center justify-center gap-2"
+                      disabled={loading}
                     >
-                      Se connecter
+                      {loading ? (
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      ) : (
+                        <span>Créer mon compte</span>
+                      )}
                     </button>
-                  </p>
-                  <button // Bouton Précédent pour l'écran d'inscription
-                    type="button"
-                    onClick={() => setCurrentStep("login")}
-                    className="text-sm text-gray-600 hover:underline mt-2 w-full max-w-xs mx-auto"
-                  >
-                    Précédent (vers connexion)
-                  </button>
-                </form>
+
+                    <button
+                      onClick={() => {
+                        setInscriptionPassword("")
+                        setShowInscriptionPassword(false)
+                        setCurrentStep("login")
+                      }}
+                      className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-50 transition-colors duration-200 flex items-center justify-center gap-2"
+                    >
+                      <span>Déjà un compte ? Se connecter</span>
+                    </button>
+                  </div>
+
+                  {message && (
+                    <div className="mt-3 flex items-center justify-center gap-2 text-red-500">
+                      <p className="text-sm">{message}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {currentStep === "inscription-done" && (
+              <div className="flex flex-col items-center justify-center min-h-[80vh] w-full">
+                <div className="space-y-6 w-full max-w-md">
+                  <div className="text-center">
+                    <h2 className="text-2xl font-semibold text-[#000000] mb-4">Compte créé !</h2>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-center gap-2">
+                      <p className="text-gray-700">
+                        Identifiant : <strong className="text-indigo-600">{uid}</strong>
+                      </p>
+                      <button
+                        onClick={copyToClipboard}
+                        className="p-2 text-gray-500 hover:text-indigo-600 transition-colors duration-200"
+                        title="Copier l'identifiant"
+                      >
+                        {copied ? "✅" : "📋"}
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-orange-500 text-center">
+                      Attention : cet identifiant est unique, ne le perdez pas !<br/>
+                      Sinon, il faudra en recréer un nouveau.
+                    </p>
+
+                    <button
+                      onClick={() => setCurrentStep("login")}
+                      className="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition-colors duration-200 flex items-center justify-center gap-2"
+                    >
+                      <span>Se connecter</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1151,14 +1211,14 @@ export default function WelcomePage() {
               <div className="flex flex-col items-center justify-center min-h-[80vh] w-full">
                 <div className="border border-[#c8c6c6] rounded-lg p-6 bg-white mb-6 w-full max-w-md">
                   <p className="text-[#414143] text-center">
-                    {userRole === "accompagnant" 
+                    {userRole === "accompagnant"
                       ? "Maintenant je vais vous poser des questions sur la personne que vous accompagnez"
                       : "Maintenant je vais vous poser des questions pour bien comprendre votre situation"}
                   </p>
                 </div>
 
-                <div className="flex justify-center w-full max-w-md mt-4 gap-3"> 
-                  <button 
+                <div className="flex justify-center w-full max-w-md mt-4 gap-3">
+                  <button
                     type="button"
                     onClick={() => setCurrentStep("initial")}
                     className="rounded-full px-4 py-2 bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all"
@@ -1180,12 +1240,12 @@ export default function WelcomePage() {
               // Third screen with document selection
               <div className="flex flex-col items-center justify-center min-h-[80vh] w-full">
                 <div className="space-y-5 w-full max-w-md">
-                  <div className="text-center"> 
+                  <div className="text-center">
                     <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 mb-1.5">
                       <span className="mr-1.5">
                         {userRole === "accompagnant" ? "🪪" : "📄"}
                       </span>
-                      {userRole === "accompagnant" 
+                      {userRole === "accompagnant"
                         ? "Quels sont les documents dont elle dispose ?"
                         : "Quels documents avez-vous ?"}
                     </h2>
@@ -1213,8 +1273,8 @@ export default function WelcomePage() {
                     ))}
                   </div>
 
-                  <div className="flex justify-center pt-3 mt-4 gap-3"> 
-                    <button 
+                  <div className="flex justify-center pt-3 mt-4 gap-3">
+                    <button
                       type="button"
                       onClick={() => setCurrentStep("intro")}
                       className="rounded-full px-4 py-2 bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all text-xs font-medium"
@@ -1263,8 +1323,8 @@ export default function WelcomePage() {
                     />
                     {birthdateError && <p className="text-red-500 text-sm mt-1">{birthdateError}</p>}
 
-                    <div className="mt-6 flex justify-center w-full gap-3"> 
-                      <button 
+                    <div className="mt-6 flex justify-center w-full gap-3">
+                      <button
                         type="button"
                         onClick={() => setCurrentStep("documents")}
                         className="rounded-full px-4 py-2 bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all"
@@ -1301,8 +1361,8 @@ export default function WelcomePage() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header dynamique */}
         <header className="border-b border-gray-200 p-4 bg-white shadow-sm flex justify-center items-center">
-          <button 
-            onClick={handleGoHome} 
+          <button
+            onClick={handleGoHome}
             className="text-xl font-semibold text-gray-800 hover:text-blue-600 transition-colors duration-150 flex items-center gap-2"
             title="Retour à l'accueil"
           >
@@ -1348,7 +1408,7 @@ export default function WelcomePage() {
                   <div key={message.id} className="space-y-2">
                     <div className={`flex ${message.sender === "assistant" ? "justify-start" : "justify-end"}`}>
                       <div
-                        className={`p-3 md:p-4 rounded-xl shadow-sm ${ 
+                        className={`p-3 md:p-4 rounded-xl shadow-sm ${
                           message.sender === "assistant"
                             ? "bg-white text-gray-800 rounded-bl-none max-w-full sm:max-w-2xl md:max-w-3xl" // Largeur ajustée pour l'assistant
                             : "bg-blue-600 text-white rounded-br-none max-w-[85%] sm:max-w-xl md:max-w-2xl" // Largeur ajustée pour l'utilisateur
@@ -1368,8 +1428,8 @@ export default function WelcomePage() {
                             {message.content}
                           </ReactMarkdown>
                         </div>
-                        <span className={`text-xs mt-1.5 block ${ 
-                          message.sender === 'assistant' ? 'text-gray-400' : 'text-blue-200' 
+                        <span className={`text-xs mt-1.5 block ${
+                          message.sender === 'assistant' ? 'text-gray-400' : 'text-blue-200'
                         }`}>
                           {formatTimestamp(message.timestamp)}
                         </span>
@@ -1423,7 +1483,7 @@ export default function WelcomePage() {
                     )}
                   </div>
                 ))}
-                {/* Indicateur de chargement */} 
+                {/* Indicateur de chargement */}
                 {isLoading && (
                   <div className="flex justify-start">
                      <div className="max-w-[95%] md:max-w-[85%] p-3 md:p-4 rounded-xl shadow-sm bg-white text-gray-800 rounded-bl-none">
@@ -1434,7 +1494,7 @@ export default function WelcomePage() {
                        <div className="flex items-center space-x-1">
                          <span className="text-sm text-gray-500">Recherche d&apos;informations...</span>
                          {/* Simple spinner */}
-                         <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div> 
+                         <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
                        </div>
                      </div>
                   </div>
