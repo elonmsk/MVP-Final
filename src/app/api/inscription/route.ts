@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
   const email = `${uid}@gmail.com`
 
-  const { data, error: createError } = await supabaseAdmin.auth.admin.createUser({
+  const { error: createError } = await supabaseAdmin.auth.admin.createUser({
     email,
     password,
     email_confirm: true,

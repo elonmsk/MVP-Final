@@ -17,7 +17,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Erreur lors de la récupération des utilisateurs' }, { status: 500 })
     }
 
-    // 2. Recherche l’utilisateur via display_name
+    // 2. Recherche l'utilisateur via display_name
     const user = userList.users.find(
       (u) => String(u.user_metadata?.display_name) === String(identifiant)
     )
@@ -43,8 +43,12 @@ export async function POST(req: Request) {
       uid: connectedUser.id,
       display_name: connectedUser.user_metadata?.display_name ?? 'inconnu',
     })
-  } catch (e: any) {
+  } catch (e: unknown) {
+    let message = 'Erreur inconnue';
+    if (e instanceof Error) {
+      message = e.message;
+    }
     console.error('Erreur API /api/login :', e)
-    return NextResponse.json({ error: '❌ Erreur interne : ' + e.message }, { status: 500 })
+    return NextResponse.json({ error: '❌ Erreur interne : ' + message }, { status: 500 })
   }
 }
