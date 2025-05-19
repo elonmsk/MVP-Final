@@ -966,7 +966,7 @@ export default function WelcomePage() {
               </div>
 
               {/* Cet élément s'affiche si currentStep est "initial" */}
-              <div className="flex items-center gap-2 text-gray-600 text-sm sm:text-base justify-center pt-2">
+              <div className="hidden sm:flex items-center gap-2 text-gray-600 text-sm sm:text-base justify-center pt-2">
                 <Sparkles className="h-4 w-4 text-yellow-500" />
                 <span>C&apos;est rapide, gratuit et sans inscription</span>
               </div>
