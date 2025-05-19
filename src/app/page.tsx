@@ -3,7 +3,7 @@
 import type React from "react"
 
 import Image from "next/image"
-import { Sparkles, Check, Send, Lock, Menu, MessageSquareText } from "lucide-react"
+import { Sparkles, Check, Send } from "lucide-react"
 import { useState, useRef, useEffect } from "react"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -181,7 +181,6 @@ export default function WelcomePage() {
 
   // Nouveaux états pour la modale de confirmation de suppression
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState<boolean>(false);
-  const [conversationToDeleteId, setConversationToDeleteId] = useState<string | null>(null);
 
   // Helper pour générer un nom de conversation par défaut
   const generateDefaultConversationName = (currentMessages: Message[]): string => {
@@ -358,34 +357,6 @@ export default function WelcomePage() {
     return newConversationId; // Retourner l'ID pour le chargement initial
   }
 
-  const loadConversation = (conversationId: string) => {
-    const conversationToLoad = allConversations.find(conv => conv.id === conversationId)
-    if (conversationToLoad) {
-      const { sessionData } = conversationToLoad
-      setMessages(sessionData.messages.map(msg => ({ ...msg, timestamp: new Date(msg.timestamp) })))
-      setHistory(sessionData.history.map(item => ({ ...item, timestamp: new Date(item.timestamp) })))
-      setCurrentStep(sessionData.currentStep)
-      setUserRole(sessionData.userRole)
-      setSelectedCategory(sessionData.selectedCategory)
-      setUserAnswers(sessionData.userAnswers)
-      setCurrentQuestionIndex(sessionData.currentQuestionIndex)
-      setEmail(sessionData.email)
-      setBirthdate(sessionData.birthdate)
-      // Réinitialiser les champs de formulaire temporaires et erreurs
-      setQuestion("")
-      setPassword("")
-      setLoginError("")
-      setRegisterEmail("")
-      setRegisterPassword("")
-      setConfirmPassword("")
-      setRegisterError("")
-      setSelectedDocuments([])
-      setBirthdateError("")
-      
-      setActiveConversationId(conversationId)
-    }
-  }
-
   const handleGoHome = () => {
     const newConvId = createNewConversation(allConversations);
     // Après création, forcer l'étape initiale si c'est un vrai "Go Home"
@@ -443,44 +414,6 @@ export default function WelcomePage() {
         setActiveConversationId(forcedNewId);
     }
     setSidebarOpen(false); 
-  };
-
-  const handleDeleteConversation = (conversationIdToDelete: string) => {
-    setConversationToDeleteId(conversationIdToDelete);
-    setShowDeleteConfirmModal(true);
-    // if (window.confirm("Êtes-vous sûr de vouloir supprimer cette conversation ?")) {
-    //   const updatedConversations = allConversations.filter(conv => conv.id !== conversationIdToDelete);
-    //   setAllConversations(updatedConversations);
-
-    //   if (activeConversationId === conversationIdToDelete) {
-    //     if (updatedConversations.length > 0) {
-    //       // Charger la plus récente des conversations restantes
-    //       const mostRecentConversation = [...updatedConversations].sort((a, b) => b.lastActivity - a.lastActivity)[0];
-    //       loadConversation(mostRecentConversation.id);
-    //     } else {
-    //       // S'il n'y a plus de conversations, en créer une nouvelle
-    //       createNewConversation([]);
-    //     }
-    //   } // Si la conversation supprimée n'était pas active, l'ID actif reste valide (ou sera géré par le useEffect de chargement).
-    // }
-  };
-
-  const confirmActualDelete = () => {
-    if (!conversationToDeleteId) return;
-
-    const updatedConversations = allConversations.filter(conv => conv.id !== conversationToDeleteId);
-    setAllConversations(updatedConversations);
-
-    if (activeConversationId === conversationToDeleteId) {
-      if (updatedConversations.length > 0) {
-        const mostRecentConversation = [...updatedConversations].sort((a, b) => b.lastActivity - a.lastActivity)[0];
-        loadConversation(mostRecentConversation.id);
-      } else {
-        createNewConversation([]);
-      }
-    }
-    setShowDeleteConfirmModal(false);
-    setConversationToDeleteId(null);
   };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -991,7 +924,7 @@ export default function WelcomePage() {
       <div className="min-h-screen flex flex-col lg:flex-row">
         {/* Left Section - White Background - Conditionally render based on currentStep */}
         {currentStep === "initial" && (
-          <div className="lg:w-1/2 bg-[#faf9f6] flex items-center justify-center p-6 sm:p-12 order-2 lg:order-1">
+          <div className="lg:w-1/2 bg-[#faf9f6] flex items-center justify-center p-6 sm:p-12 order-1 lg:order-1">
             <div className="w-full max-w-md space-y-6 sm:space-y-8 text-center">
               <div className="flex flex-col items-center">
                 <div className="mb-4">
@@ -1012,7 +945,7 @@ export default function WelcomePage() {
               </div>
 
               {/* Ces éléments s'affichent si currentStep est "initial" */}
-              <div className="space-y-4 sm:space-y-6 text-left">
+              <div className="hidden sm:block space-y-4 sm:space-y-6 text-left">
                 <h2 className="text-xl font-semibold text-gray-700">Comment ça marche ?</h2>
                 <ol className="space-y-3">
                   <li className="flex gap-3">
@@ -1045,7 +978,7 @@ export default function WelcomePage() {
         <div
           className={`
             ${currentStep === "initial" ? "lg:w-1/2" : "w-full"} 
-            bg-white flex flex-col justify-center items-center p-6 sm:p-12 order-1 lg:order-2
+            bg-white flex flex-col justify-center items-center p-6 sm:p-12 order-2 lg:order-2
           `}
         >
           <div className="w-full max-w-md space-y-4 sm:space-y-6">
@@ -1059,12 +992,12 @@ export default function WelcomePage() {
                 </div>
 
                 <div className="max-w-md mx-auto">
-                  <div className="flex flex-row gap-3 sm:gap-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
                     <button
                       className="w-full bg-[#000000] text-white rounded-lg p-3 sm:p-4 flex items-center justify-center gap-2 hover:bg-opacity-90 transition-all text-base sm:text-lg"
                       onClick={() => {
                         setUserRole("accompagnant");
-                        setCurrentStep("login");
+                        setCurrentStep("intro");
                       }}
                     >
                       <span className="text-yellow-400">👤</span>
@@ -1215,8 +1148,8 @@ export default function WelcomePage() {
 
             {currentStep === "intro" && (
               // Second screen with introduction message
-              <div className="flex flex-col items-center justify-center h-full">
-                <div className="border border-[#c8c6c6] rounded-lg p-6 bg-white mb-6 w-full">
+              <div className="flex flex-col items-center justify-center min-h-[80vh] w-full">
+                <div className="border border-[#c8c6c6] rounded-lg p-6 bg-white mb-6 w-full max-w-md">
                   <p className="text-[#414143] text-center">
                     {userRole === "accompagnant" 
                       ? "Maintenant je vais vous poser des questions sur la personne que vous accompagnez"
@@ -1224,10 +1157,10 @@ export default function WelcomePage() {
                   </p>
                 </div>
 
-                <div className="flex justify-center w-full mt-4 gap-3"> 
+                <div className="flex justify-center w-full max-w-md mt-4 gap-3"> 
                   <button 
                     type="button"
-                    onClick={() => setCurrentStep("login")}
+                    onClick={() => setCurrentStep("initial")}
                     className="rounded-full px-4 py-2 bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all"
                   >
                     Précédent
@@ -1245,103 +1178,107 @@ export default function WelcomePage() {
 
             {currentStep === "documents" && (
               // Third screen with document selection
-              <div className="space-y-5">
-                <div className="text-center"> 
-                  <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 mb-1.5">
-                    <span className="mr-1.5">
-                      {userRole === "accompagnant" ? "🪪" : "📄"}
-                    </span>
-                    {userRole === "accompagnant" 
-                      ? "Quels sont les documents dont elle dispose ?"
-                      : "Quels documents avez-vous ?"}
-                  </h2>
-                  <p className="text-gray-500 text-xs sm:text-sm">
-                    {userRole === "accompagnant"
-                      ? "Vous pouvez sélectionner plusieurs documents pour cette personne"
-                      : "Vous pouvez sélectionner plusieurs documents"}
-                  </p>
-                </div>
+              <div className="flex flex-col items-center justify-center min-h-[80vh] w-full">
+                <div className="space-y-5 w-full max-w-md">
+                  <div className="text-center"> 
+                    <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 mb-1.5">
+                      <span className="mr-1.5">
+                        {userRole === "accompagnant" ? "🪪" : "📄"}
+                      </span>
+                      {userRole === "accompagnant" 
+                        ? "Quels sont les documents dont elle dispose ?"
+                        : "Quels documents avez-vous ?"}
+                    </h2>
+                    <p className="text-gray-500 text-xs sm:text-sm">
+                      {userRole === "accompagnant"
+                        ? "Vous pouvez sélectionner plusieurs documents pour cette personne"
+                        : "Vous pouvez sélectionner plusieurs documents"}
+                    </p>
+                  </div>
 
-                <div className="space-y-2.5 flex flex-col items-center">
-                  {documents.map((doc) => (
-                    <div key={doc.id} className="flex items-start gap-2 w-full max-w-xs">
-                      <input
-                        type="checkbox"
-                        id={doc.id}
-                        checked={selectedDocuments.includes(doc.id)}
-                        onChange={() => toggleDocument(doc.id)}
-                        className="mt-0.5 h-3.5 w-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />
-                      <label htmlFor={doc.id} className="text-gray-600 text-xs sm:text-sm cursor-pointer">
-                        {doc.label}
-                      </label>
-                    </div>
-                  ))}
-                </div>
+                  <div className="space-y-2.5 flex flex-col items-center">
+                    {documents.map((doc) => (
+                      <div key={doc.id} className="flex items-start gap-2 w-full max-w-xs">
+                        <input
+                          type="checkbox"
+                          id={doc.id}
+                          checked={selectedDocuments.includes(doc.id)}
+                          onChange={() => toggleDocument(doc.id)}
+                          className="mt-0.5 h-3.5 w-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <label htmlFor={doc.id} className="text-gray-600 text-xs sm:text-sm cursor-pointer">
+                          {doc.label.replace("'", "&apos;")}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
 
-                <div className="flex justify-center pt-3 mt-4 gap-3"> 
-                  <button 
-                    type="button"
-                    onClick={() => setCurrentStep("intro")}
-                    className="rounded-full px-4 py-2 bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all text-xs font-medium"
-                  >
-                    Précédent
-                  </button>
-                  <button
-                    className="rounded-full px-4 py-2 bg-gray-800 text-white text-xs font-medium hover:bg-gray-700 transition-all flex items-center gap-1.5"
-                    onClick={() => setCurrentStep("birthdate")}
-                  >
-                    <span>Continuer</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                  </button>
+                  <div className="flex justify-center pt-3 mt-4 gap-3"> 
+                    <button 
+                      type="button"
+                      onClick={() => setCurrentStep("intro")}
+                      className="rounded-full px-4 py-2 bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all text-xs font-medium"
+                    >
+                      Précédent
+                    </button>
+                    <button
+                      className="rounded-full px-4 py-2 bg-gray-800 text-white text-xs font-medium hover:bg-gray-700 transition-all flex items-center gap-1.5"
+                      onClick={() => setCurrentStep("birthdate")}
+                    >
+                      <span>Continuer</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
 
             {currentStep === "birthdate" && (
               // Fourth screen with birthdate input
-              <div className="space-y-6">
-                <div className="text-center">
-                  <h2 className="text-2xl font-semibold text-[#000000] mb-4">
-                    <span className="mr-2">
-                      {userRole === "accompagnant" ? "🗓️" : "📅"}
-                    </span>
-                    {userRole === "accompagnant"
-                      ? "Quelle est sa date de naissance ?"
-                      : "Quelle est votre date de naissance ?"}
-                  </h2>
-                  {/* Le placeholder et la gestion d'erreur peuvent rester génériques ou être adaptés si besoin */}
-                </div>
+              <div className="flex flex-col items-center justify-center min-h-[80vh] w-full">
+                <div className="space-y-6 w-full max-w-md">
+                  <div className="text-center">
+                    <h2 className="text-2xl font-semibold text-[#000000] mb-4">
+                      <span className="mr-2">
+                        {userRole === "accompagnant" ? "🗓️" : "📅"}
+                      </span>
+                      {userRole === "accompagnant"
+                        ? "Quelle est sa date de naissance ?"
+                        : "Quelle est votre date de naissance ?"}
+                    </h2>
+                    {/* Le placeholder et la gestion d'erreur peuvent rester génériques ou être adaptés si besoin */}
+                  </div>
 
-                <div className="flex flex-col items-center">
-                  <input
-                    type="text"
-                    value={birthdate}
-                    onChange={(e) => {
-                      setBirthdate(e.target.value)
-                      if (birthdateError) setBirthdateError("")
-                    }}
-                    placeholder="JJ/MM/AAAA"
-                    className="border border-[#c8c6c6] rounded-md p-3 w-full max-w-xs text-center"
-                    aria-label="Date de naissance"
-                  />
-                  {birthdateError && <p className="text-red-500 text-sm mt-1">{birthdateError}</p>}
+                  <div className="flex flex-col items-center">
+                    <input
+                      type="text"
+                      value={birthdate}
+                      onChange={(e) => {
+                        setBirthdate(e.target.value)
+                        if (birthdateError) setBirthdateError("")
+                      }}
+                      placeholder="JJ/MM/AAAA"
+                      className="border border-[#c8c6c6] rounded-md p-3 w-full max-w-xs text-center"
+                      aria-label="Date de naissance"
+                    />
+                    {birthdateError && <p className="text-red-500 text-sm mt-1">{birthdateError}</p>}
 
-                  <div className="mt-6 flex justify-center w-full gap-3"> 
-                    <button 
-                      type="button"
-                      onClick={() => setCurrentStep("documents")}
-                      className="rounded-full px-4 py-2 bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all"
-                    >
-                      Précédent
-                    </button>
-                    <button
-                      className="rounded-full px-4 py-2 bg-[#f5f5f5] text-[#414143] flex items-center gap-2 hover:bg-gray-200 transition-all"
-                      onClick={handleBirthdateSubmit}
-                    >
-                      <Check className="h-5 w-5 text-green-500" />
-                      <span>Valider</span>
-                    </button>
+                    <div className="mt-6 flex justify-center w-full gap-3"> 
+                      <button 
+                        type="button"
+                        onClick={() => setCurrentStep("documents")}
+                        className="rounded-full px-4 py-2 bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all"
+                      >
+                        Précédent
+                      </button>
+                      <button
+                        className="rounded-full px-4 py-2 bg-[#f5f5f5] text-[#414143] flex items-center gap-2 hover:bg-gray-200 transition-all"
+                        onClick={handleBirthdateSubmit}
+                      >
+                        <Check className="h-5 w-5 text-green-500" />
+                        <span>Valider</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1355,99 +1292,11 @@ export default function WelcomePage() {
   // Affichage du tableau de bord principal (après l'onboarding)
   return (
     <div className="h-screen bg-gray-50 flex text-gray-800 relative">
-      {/* Bouton d'ouverture sidebar - visible sur tous les écrans */}
-      <button
-        className={`absolute top-3 left-3 z-50 bg-white border border-gray-200 rounded-full p-2 shadow transition-opacity duration-300 ${sidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
-        onClick={() => setSidebarOpen(true)}
-        aria-label="Ouvrir le menu"
-      >
-        <Menu className="h-6 w-6" />
-      </button>
-
       {/* Overlay - visible sur tous les écrans quand sidebar ouverte */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-30 bg-black/30" onClick={() => setSidebarOpen(false)}></div>
       )}
 
-      {/* Sidebar responsive - maintenant contrôlée par sidebarOpen sur tous les écrans */}
-      <div
-        className={`
-          bg-white border-r border-gray-200 flex flex-col
-          w-80 fixed top-0 left-0 h-full z-40 transition-transform duration-300 transform
-          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        `}
-        style={{ maxWidth: 320 }}
-        tabIndex={-1}
-        aria-label="Sidebar"
-        aria-hidden={!sidebarOpen}
-      >
-        {/* Bouton de fermeture à l'intérieur de la sidebar */}
-        <div className="flex justify-end p-2">
-          <button
-            className="bg-gray-100 rounded-full p-2 hover:bg-gray-200"
-            onClick={() => setSidebarOpen(false)}
-            aria-label="Fermer le menu"
-          >
-            <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
-        </div>
-        <div className="p-6 flex-1 overflow-y-auto">
-          {/* Titre pour la liste des conversations */}
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">Mes Conversations</h2>
-            <button
-              onClick={() => createNewConversation(allConversations)}
-              className="text-sm bg-blue-500 hover:bg-blue-600 text-white font-medium py-1 px-2.5 rounded-lg flex items-center gap-1.5"
-              title="Démarrer une nouvelle conversation"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-              Nouveau
-            </button>
-          </div>
-          
-          {/* Liste des conversations */}
-          <div className="border border-gray-200 rounded-lg min-h-[100px] max-h-[calc(100vh-280px)] overflow-y-auto">
-            {allConversations.length > 0 ? (
-              <ul className="w-full divide-y divide-gray-200">
-                {[...allConversations].sort((a, b) => b.lastActivity - a.lastActivity).map((conversation) => (
-                  <li key={conversation.id} className="flex items-center justify-between hover:bg-gray-50">
-                    <button
-                      onClick={() => loadConversation(conversation.id)}
-                      className={`flex-grow text-left p-2.5 text-xs transition-colors ${conversation.id === activeConversationId ? "bg-gray-100 font-medium" : "hover:bg-gray-100"}`}
-                    >
-                      <span className="block truncate">{conversation.name}</span>
-                      <span className="block text-gray-400 text-[10px] mt-0.5">
-                        Dernière activité: {formatTimestamp(new Date(conversation.lastActivity))}
-                      </span>
-                    </button>
-                    <button
-                      onClick={(e) => { 
-                        e.stopPropagation(); // Empêcher le déclenchement de loadConversation
-                        handleDeleteConversation(conversation.id); 
-                      }}
-                      className="p-2.5 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
-                      title="Supprimer la conversation"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-gray-400 py-4 px-2 text-center">
-                <MessageSquareText className="h-6 w-6 mb-2" />
-                <span>Aucune conversation.</span>
-                <span className="text-xs">Cliquez sur &quot;Nouveau&quot; pour commencer.</span>
-              </div>
-            )}
-          </div>
-        </div>
-        
-        <div className="p-4 border-t border-gray-200 flex items-center text-xs text-gray-500">
-          <Lock className="h-4 w-4 mr-2 text-gray-400" />
-          <span>Vos informations ne sont pas sauvegardées</span>
-        </div>
-      </div>
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header dynamique */}
@@ -1634,15 +1483,15 @@ export default function WelcomePage() {
               <button
                 onClick={() => {
                   setShowDeleteConfirmModal(false);
-                  setConversationToDeleteId(null);
                 }}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
               >
                 Annuler
               </button>
               <button
-                onClick={confirmActualDelete}
+                onClick={() => {/* fonction supprimée, bouton inactif */}}
                 className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
+                disabled
               >
                 Supprimer
               </button>
