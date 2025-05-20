@@ -1226,7 +1226,7 @@ export default function WelcomePage() {
                           className="mt-0.5 h-3.5 w-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                         />
                         <label htmlFor={doc.id} className="text-gray-600 text-xs sm:text-sm cursor-pointer">
-                          {doc.label.replace("'", "&apos;")}
+                          {doc.label}
                         </label>
                       </div>
                     ))}
