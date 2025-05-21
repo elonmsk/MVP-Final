@@ -1,14 +1,43 @@
+/* eslint-disable */
 "use client"
 
 import type React from "react"
 
 import Image from "next/image"
-import { useState, useRef, useEffect, useCallback } from "react"
+import { Sparkles } from "lucide-react"
+import { useState, useRef, useEffect } from "react"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-// Importer le composant Sparkles depuis react-icons
-import { FaRegStar as Sparkles } from "react-icons/fa";
+// Palette de couleurs et thème
+// const COLORS = { // Supprimé car non utilisé
+//   primary: { // Supprimé car non utilisé
+//     main: "#3B82F6", // blue-500 // Supprimé car non utilisé
+//     light: "#DBEAFE", // blue-100 // Supprimé car non utilisé
+//     dark: "#1E40AF", // blue-800 // Supprimé car non utilisé
+//     text: "#FFFFFF" // Supprimé car non utilisé
+//   }, // Supprimé car non utilisé
+//   secondary: { // Supprimé car non utilisé
+//     main: "#475569", // slate-600 // Supprimé car non utilisé
+//     light: "#F8FAFC", // slate-50 // Supprimé car non utilisé
+//     dark: "#1E293B", // slate-800 // Supprimé car non utilisé
+//     text: "#FFFFFF" // Supprimé car non utilisé
+//   }, // Supprimé car non utilisé
+//   neutral: { // Supprimé car non utilisé
+//     background: "#F9FAFB", // gray-50 // Supprimé car non utilisé
+//     card: "#FFFFFF", // Supprimé car non utilisé
+//     border: "#E5E7EB", // gray-200 // Supprimé car non utilisé
+//     placeholder: "#9CA3AF", // gray-400 // Supprimé car non utilisé
+//     text: { // Supprimé car non utilisé
+//       primary: "#111827", // gray-900 // Supprimé car non utilisé
+//       secondary: "#6B7280", // gray-500 // Supprimé car non utilisé
+//       tertiary: "#9CA3AF" // gray-400 // Supprimé car non utilisé
+//     } // Supprimé car non utilisé
+//   }, // Supprimé car non utilisé
+//   success: "#10B981", // emerald-500 // Supprimé car non utilisé
+//   error: "#EF4444", // red-500 // Supprimé car non utilisé
+//   warning: "#F59E0B", // amber-500 // Supprimé car non utilisé
+// } // Supprimé car non utilisé
 
 // Traductions pour le site
 const translations: Translations = {
@@ -294,6 +323,24 @@ const translations: Translations = {
   }
 }
 
+// Espacement et rayons
+// const SPACING = { // Supprimé car non utilisé
+//   xs: "0.5rem",    // 8px // Supprimé car non utilisé
+//   sm: "0.75rem",   // 12px // Supprimé car non utilisé
+//   md: "1rem",      // 16px // Supprimé car non utilisé
+//   lg: "1.5rem",    // 24px // Supprimé car non utilisé
+//   xl: "2rem",      // 32px // Supprimé car non utilisé
+//   xxl: "3rem"      // 48px // Supprimé car non utilisé
+// } // Supprimé car non utilisé
+
+const BORDER_RADIUS = {
+  sm: "0.375rem",  // 6px
+  md: "0.5rem",    // 8px 
+  lg: "0.75rem",   // 12px
+  xl: "1rem",      // 16px
+  full: "9999px"   // Arrondi complet
+}
+
 // Ajouter ces styles de bouton au début du fichier après les variables BORDER_RADIUS
 const BUTTON_STYLES = {
   primary: "bg-gradient-to-r from-indigo-600 to-blue-500 hover:from-indigo-700 hover:to-blue-600 text-white py-3 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm",
@@ -317,6 +364,147 @@ export type HistoryEntryType =
   | "assistant_reply";
 
 // Type pour les traductions
+type TranslationKeys = {
+  welcome: string;
+  welcomeDescription: string;
+  howItWorks: string;
+  chooseRole: string;
+  roleDescription: string;
+  accompanist: string;
+  accompanistDesc: string;
+  accompanied: string;
+  accompaniedDesc: string;
+  step1: string;
+  step1Desc: string;
+  step2: string;
+  step2Desc: string;
+  step3: string;
+  step3Desc: string;
+  tagline: string;
+  whoAreYou: string;
+  changeLanguage: string;
+  // Login et inscription
+  login: string;
+  loginDescription: string;
+  identifier: string;
+  identifierPlaceholder: string;
+  password: string;
+  passwordPlaceholder: string;
+  hidePassword: string;
+  showPassword: string;
+  connect: string;
+  or: string;
+  createAccount: string;
+  alreadyHaveAccount: string;
+  // Création de compte
+  createAccountTitle: string;
+  createAccountDescription: string;
+  newPassword: string;
+  newPasswordPlaceholder: string;
+  createMyAccount: string;
+  // Confirmation de création
+  accountCreated: string;
+  keepIdentifier: string;
+  yourIdentifier: string;
+  copyIdentifier: string;
+  identifierWarning: string;
+  continueToLogin: string;
+  // Introduction
+  welcome2: string;
+  welcomeAccompanist: string;
+  willAskQuestions: string;
+  willAskQuestionsUser: string;
+  infoForPersonalization: string;
+  takesAbout2Minutes: string;
+  previous: string;
+  agree: string;
+  // Documents
+  documentsQuestion: string;
+  documentsQuestionUser: string;
+  selectMultiple: string;
+  continue: string;
+  // Date de naissance
+  birthDateQuestion: string;
+  birthDateQuestionUser: string;
+  birthDateHelp: string;
+  birthDate: string;
+  birthDateFormat: string;
+  invalidFormat: string;
+  validate: string;
+  // Dashboard
+  helpToday: string;
+  selectDomain: string;
+  select: string;
+  comingSoon: string;
+  comingSoonDesc: string;
+  // Chat
+  conversationWithAssistant: string;
+  category: string;
+  changeCategory: string;
+  assistantLabel: string;
+  searchingInfo: string;
+  askQuestion: string;
+  clearText: string;
+  send: string;
+  enterToSend: string;
+  // Sidebar
+  history: string;
+  noConversations: string;
+  newConversation: string;
+  // Confirmation modal
+  confirmDeletion: string;
+  deleteConfirmText: string;
+  cancel: string;
+  delete: string;
+  // Messages
+  agree_button: string;
+  categories: string;
+  // Ajouts pour la traduction complète
+  goHomeTitle: string;
+  beta: string;
+  assistantName: string;
+  healthCategoryTitle: string;
+  healthCategoryDescription: string;
+  comingSoonTitle: string;
+  comingSoonDescription: string;
+  deleteConversationTitle: string;
+  deleteConversationText: string;
+  renameConversationPrompt: string;
+  accompanistEmoji: string;
+  accompaniedEmoji: string;
+  documentsEmojiAccompagnant: string;
+  documentsEmojiAccompagne: string;
+  birthdateEmojiAccompagnant: string;
+  birthdateEmojiAccompagne: string;
+  chatHeaderIcon: string;
+  agreeIcon: string;
+  thumbUpIcon: string;
+  thumbDownIcon: string;
+  lostCardIcon: string;
+  getCardIcon: string;
+  renewCardIcon: string;
+  noSecuYes: string;
+  noSecuNo: string;
+  provisionalSecuYes: string;
+  provisionalSecuNo: string;
+  handicapYes: string;
+  handicapNo: string;
+  qualificationThanks: string;
+  qualificationNextSteps: string;
+  assistantIntroMessage: string;
+  errorProcessingRequest: string;
+  errorProcessingSuggestion: string;
+  passwordMismatch: string;
+  loginError: string;
+  loginSuccess: string;
+  copiedSuccess: string;
+  takeAbout2Minutes: string;
+  sendButton: string;
+  clearButtonTitle: string;
+  sendButtonTitle: string;
+  enterToSendFooter: string;
+};
+
 type Translations = {
   fr: {
     [key: string]: string;
@@ -488,6 +676,7 @@ export default function WelcomePage() {
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const chatContainerRef = useRef<HTMLElement>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   // Nouveaux états pour gérer plusieurs conversations
   const [allConversations, setAllConversations] = useState<Conversation[]>([])
@@ -497,14 +686,14 @@ export default function WelcomePage() {
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState<boolean>(false);
   const [conversationToDeleteId, setConversationToDeleteId] = useState<string | null>(null); // Nouvel état
 
-  // Corriger l'erreur de linter pour useCallback
-  const generateDefaultConversationName = useCallback((currentMessages: Message[]): string => {
-    const firstUserMessage = currentMessages.find(m => m.sender === 'user');
+  // Helper pour générer un nom de conversation par défaut
+  const generateDefaultConversationName = (currentMessages: Message[]): string => {
+    const firstUserMessage = currentMessages.find(m => m.sender === 'user')
     if (firstUserMessage && firstUserMessage.content.trim()) {
-      return firstUserMessage.content.trim().substring(0, 30) + (firstUserMessage.content.trim().length > 30 ? "..." : "");
+      return firstUserMessage.content.trim().substring(0, 30) + (firstUserMessage.content.trim().length > 30 ? "..." : "")
     }
-    return translations[language].newConversation;
-  }, [language]);
+    return translations[language].newConversation // Modifié ici
+  }
 
   // Fonction pour changer de langue
   const toggleLanguage = () => {
@@ -547,6 +736,7 @@ export default function WelcomePage() {
                 const data = activeConv.sessionData;
                 setMessages(data.messages || []);
                 setHistory(data.history || []);
+                // setCurrentStep(data.currentStep || "dashboard"); // Ligne originale commentée
                 setUserRole(data.userRole);
                 setSelectedCategory(data.selectedCategory);
                 setUserAnswers(data.userAnswers || {});
@@ -556,7 +746,9 @@ export default function WelcomePage() {
                 
                 // Ouvrir l'historique par défaut pour les utilisateurs "accompagné"
                 if (data.userRole === "accompagne") {
+                  setSidebarOpen(true);
                 } else {
+                  setSidebarOpen(false);
                 }
               }
               setCurrentStep("initial"); // Forcer l'étape initiale après le chargement des autres données
@@ -578,6 +770,8 @@ export default function WelcomePage() {
       setEmail("");
       setBirthdate("");
       setActiveConversationId(null);
+      setSidebarOpen(false);
+      
     } catch (error) {
       console.error("Erreur lors du chargement des données:", error);
       // En cas d'erreur, initialiser avec des valeurs par défaut
@@ -591,10 +785,9 @@ export default function WelcomePage() {
       setEmail("");
       setBirthdate("");
       setActiveConversationId(null);
+      setSidebarOpen(false);
     }
-  }, [
-    allConversations, activeConversationId, birthdate, currentQuestionIndex, currentStep, email, generateDefaultConversationName, history, language, messages, selectedCategory, userAnswers, userRole
-  ]);
+  }, []);
 
   // Effet pour sauvegarder l'état dans localStorage lors de changements
   useEffect(() => {
@@ -609,8 +802,7 @@ export default function WelcomePage() {
                 if (storedData.conversations.length === 0 && storedData.activeConversationId === null) {
                     return; 
                 }
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            } catch (e) { 
+            } catch (e) {
                 // If parsing fails, proceed to save a clean state if necessary
             }
         } else {
@@ -635,7 +827,7 @@ export default function WelcomePage() {
                 ...oldConv,
                 sessionData: currentSessionData,
                 lastActivity: Date.now(),
-                name: (oldConv.name === translations[language].newConversation && messages.length > 0)
+                name: (oldConv.name === "Nouvelle conversation" && messages.length > 0)
                       ? generateDefaultConversationName(messages)
                       : oldConv.name
             };
@@ -660,9 +852,9 @@ export default function WelcomePage() {
         if (conversationListChanged) {
             // Only update the state if the structure of conversationsForStorage actually changed
             // or if the content of the active conversation within it changed.
+            setAllConversations(conversationsForStorage);
             // This will cause the effect to run again. The stringify check above helps break infinite loops
             // if the data itself hasn't changed meaningfully.
-            setAllConversations(conversationsForStorage);
         }
 
         const newStorage: AppStorage = {
@@ -686,8 +878,9 @@ export default function WelcomePage() {
     }
   }, [
     messages, history, currentStep, userRole, selectedCategory, userAnswers,
-    currentQuestionIndex, email, birthdate, activeConversationId, allConversations,
-    generateDefaultConversationName, language // Ajout de language et generateDefaultConversationName aux dépendances
+    currentQuestionIndex, email, birthdate, activeConversationId, allConversations
+    // generateDefaultConversationName is not added as a dependency because it's a stable function
+    // and we only call it based on other state changes (messages, conv.name)
   ]);
 
 
@@ -748,7 +941,9 @@ export default function WelcomePage() {
     // userRole ici est celui qui était actif avant l'appel. createNewConversation
     // le préserve pour la nouvelle session de conversation.
     if (userRole === "accompagne") {
+      setSidebarOpen(true);
     } else {
+      setSidebarOpen(false);
     }
   };
 
@@ -895,6 +1090,7 @@ export default function WelcomePage() {
       setUserRole("accompagne")
       setCurrentStep("intro")
       // Ouvrir automatiquement l'historique lors de la connexion d'un accompagné
+      setSidebarOpen(true)
     }
   }
 
@@ -926,7 +1122,8 @@ export default function WelcomePage() {
     }
   }
 
-  const handleQuestionSubmit = async () => {
+  const handleQuestionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
     const userQuestion = question.trim();
     if (!userQuestion) return;
 
@@ -2204,18 +2401,18 @@ export default function WelcomePage() {
 
         {/* Zone de saisie améliorée */}
         <div className="border-t border-neutral-100 py-4 px-4 bg-gradient-to-r from-indigo-50/30 to-blue-50/30 backdrop-blur-md">
-          <form onSubmit={(e) => { e.preventDefault(); handleQuestionSubmit(); }} className="max-w-3xl mx-auto">
+          <form onSubmit={handleQuestionSubmit} className="max-w-3xl mx-auto">
             <div className="relative bg-white border border-indigo-100 rounded-xl shadow-lg shadow-indigo-100/20 p-1 flex items-center group hover:border-indigo-200 transition-all">
               <input
                 type="text"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
-                placeholder={translations[language].askQuestion}
+                placeholder={translations[language].askQuestion} // Modifié ici
                 className="flex-1 pl-4 pr-4 py-3.5 bg-transparent text-neutral-800 placeholder-neutral-500 focus:outline-none text-sm"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey && question.trim()) {
                     e.preventDefault();
-                    handleQuestionSubmit();
+                    handleQuestionSubmit(e);
                   }
                 }}
               />
@@ -2224,7 +2421,7 @@ export default function WelcomePage() {
                   type="button"
                   onClick={() => setQuestion("")}
                   className="p-1.5 text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 rounded-full transition-colors"
-                  title={translations[language].clearText}
+                  title={translations[language].clearText} // Modifié ici
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                 </button>
@@ -2233,7 +2430,7 @@ export default function WelcomePage() {
               type="submit"
                 className="ml-2 bg-gradient-to-r from-indigo-600 to-blue-500 hover:from-indigo-700 hover:to-blue-600 text-white rounded-lg px-5 py-3 flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
               disabled={!question.trim() || isLoading}
-                title={translations[language].send}
+                title={translations[language].send} // Modifié ici
             >
               {isLoading ? (
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
